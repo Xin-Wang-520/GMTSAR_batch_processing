@@ -1,6 +1,11 @@
+<a id="english"></a>
+
+[English](#english) | [中文](#中文说明)
+
+
 # Sentinel-1 GMTSAR Burst Batch Processing Guide
 
-Author: Xin Wang, University of Science and Technology of China (USTC), Hefei, China  
+Author: Xin Wang, University of Science and Technology of China (USTC), Hefei, China
 Workflow: Sentinel-1 single-burst/single-subswath preprocessing, interferometry, unwrapping and SBAS
 
 ## 1. Overview
@@ -730,4 +735,305 @@ The following sequence shows the normal direct-SBAS workflow. Adjust thresholds,
 - Adjust parallel job counts to available CPU, memory and disk I/O capacity.
 - Preserve `run*.complete`, inventory and manifest files because later scripts use them for validation.
 - Use either the direct SBAS route or the pin-corrected route consistently.
+
+
+
+---
+
+<a id="中文说明"></a>
+
+[Back to English](#english) | [中文](#中文说明)
+
+# Sentinel-1 GMTSAR Burst 批处理说明书
+
+作者：王欣，中国科学技术大学（USTC），合肥
+流程：Sentinel-1 单 burst／单子条带预处理、干涉、解缠与 SBAS
+
+## 1. 流程说明
+
+这套脚本用于处理一个 Sentinel-1 burst 时序。所有命令默认在 `T*` 轨道根目录运行，例如：
+
+```text
+/data2/xinw/Huangshan_landslides/S1/T142A/
+```
+
+默认目录结构：
+
+```text
+T142A/
+├── data_burst/          # SAFE 与轨道文件
+├── topo/                # 地理坐标 DEM
+├── burst/
+│   ├── raw/             # XML/TIFF/EOF 链接及预处理结果
+│   ├── topo/            # 雷达坐标地形结果
+│   └── intf_all/        # 干涉对
+├── sbas_burst/          # 直接使用 unwrap.grd 的 SBAS
+└── sbas_burst_pin/      # 可选 DEM 改正和参考区归零 SBAS
+```
+
+## 2. 推荐主流程
+
+```text
+Run 2.1  检查 SAFE 并下载轨道文件
+Run 2.2  根据 XML 计算 DEM 范围并生成 DEM
+Run 2.3  链接 burst 输入文件
+Run 3.1  生成 data.in，选择时间中间影像作为主影像
+Run 3.2  预处理并配准 burst 时序
+Run 3.3  预览并确认干涉网络
+Run 3.4  生成雷达坐标地形和 trans.dat
+Run 3.5  并行生成干涉图
+Run 3.6  叠加相关性并生成 mask_def.grd
+Run 3.7  生成 landmask_ra.grd
+Run 3.8  预览 SNAPHU 输入并可续跑并行解缠
+Run 3.9  将 corr.grd 匹配到 unwrap.grd 范围
+Run 4.1  准备 SBAS 网络
+Run 4.2  生成 SBAS 表格和运行命令
+Run 4.3  后台运行 SBAS
+Run 4.4  投影和绘制 SBAS 速度
+```
+
+正常情况下直接使用 `unwrap.grd` 进入 Run 4。只有需要 DEM 误差改正及稳定区归零时，才执行 Run 3.10、Run 3.11 和带 `_pin_` 的 Run 4 脚本。
+
+## 3. Run 2：数据准备
+
+### Run 2.1：SAFE 与轨道文件
+
+```bash
+# 只检查
+./run2.1_prepare_SAFE_orbits.sh
+
+# 正式生成清单并下载精密轨道
+./run2.1_prepare_SAFE_orbits.sh 1
+
+# 精密轨道不可用时选择 RESORB
+./run2.1_prepare_SAFE_orbits.sh 1 --orbit-mode 2
+```
+
+主要输出：
+
+```text
+data_burst/SAFE_filelist
+data_burst/burst_SAFE_inventory.tsv
+data_burst/*.EOF
+data_burst/run2.1_orbit_download.log
+```
+
+### Run 2.2：DEM 范围与 DEM
+
+```bash
+# 显示说明
+./run2.2_prepare_topo_DEM_burst.py
+
+# 只计算和保存范围
+./run2.2_prepare_topo_DEM_burst.py 1
+
+# 下载 DEM 并生成 PDF
+./run2.2_prepare_topo_DEM_burst.py 2
+```
+
+默认向四周扩展 `0.2°`，可以使用 `--margin 0.3` 修改。主要输出为 `topo/dem.grd`、`topo/dem.pdf` 和三份 DEM 范围文件。
+
+### Run 2.3：建立输入链接
+
+```bash
+./run2.3_link_burst_raw_topo.sh       # 显示说明
+./run2.3_link_burst_raw_topo.sh 1     # 预览链接
+./run2.3_link_burst_raw_topo.sh 2     # 正式建立链接
+```
+
+输出位于 `burst/raw/`、`burst/topo/`，并生成 `burst/burst_swath.txt`。原始 SAFE、XML、TIFF、EOF 和 DEM 不会被删除。
+
+## 4. Run 3：预处理、干涉与解缠
+
+### Run 3.1：生成 `data.in`
+
+```bash
+./run3.1_prep_data_burst.sh
+./run3.1_prep_data_burst.sh 1
+./run3.1_prep_data_burst.sh 2
+```
+
+Mode 1 只检查；Mode 2 运行 `prep_data_linux.csh`，并把时间中间影像移动到 `data.in` 第一行。
+
+### Run 3.2：预处理
+
+推荐标准模式：
+
+```bash
+./run3.2_preproc_batch_tops_burst.sh 5 1
+```
+
+ESD 模式：
+
+```bash
+./run3.2_preproc_batch_tops_burst.sh 5 2 0   # average
+./run3.2_preproc_batch_tops_burst.sh 5 2 1   # median，推荐
+./run3.2_preproc_batch_tops_burst.sh 5 2 2   # interpolation
+```
+
+第一个参数是并行干涉对数量。小型计算机可改为 2 或 3。
+
+### Run 3.3：选择干涉网络
+
+```bash
+# 60 天时间基线、150 m 空间基线
+./run3.3_make_intf_config_burst.sh 1 60 150
+
+# 查看 burst/baseline.pdf 后确认网络
+./run3.3_make_intf_config_burst.sh 2
+```
+
+Mode 2 根据 `burst/raw/data.in` 第一行确定 `master_image`，并生成正式 `burst/intf.in` 与 `burst/batch_tops.config`。
+
+### Run 3.4：雷达坐标地形
+
+```bash
+./run3.4_dem2topo_ra_burst.sh
+./run3.4_dem2topo_ra_burst.sh 1
+```
+
+主要输出：
+
+```text
+burst/topo/trans.dat
+burst/topo/topo_ra.grd
+burst/topo/dem2topo_ra.log
+```
+
+### Run 3.5：生成干涉图
+
+```bash
+./run3.5_intf_tops_parallel_burst.sh 5
+```
+
+结果位于 `burst/intf_all/<pair>/`。脚本逐对检查 `corr.grd`、`mask.grd`、`phasefilt.grd` 等结果并生成失败清单。
+
+### Run 3.6：平均相关性掩膜
+
+```bash
+./run3.6_stack_coherence_mask_parallel_burst.sh 0.075 50 5
+```
+
+参数依次为：平均相关性阈值、每批叠加的 `corr.grd` 数量、并行批次数。主要输出：
+
+```text
+burst/mean_corr.grd
+burst/mask_def.grd
+burst/mask_def.pdf
+```
+
+### Run 3.7：陆地掩膜
+
+```bash
+./run3.7_make_landmask_ra_burst.sh
+./run3.7_make_landmask_ra_burst.sh 1
+```
+
+正式运行生成与干涉网格完全一致的 `burst/landmask_ra.grd` 和 `burst/landmask_ra.pdf`。
+
+### Run 3.8：并行解缠
+
+```bash
+# 检查
+./run3.8_unwrap_burst_parallel.sh
+
+# 预览默认干涉对
+./run3.8_unwrap_burst_parallel.sh 1 0.1
+
+# 指定干涉对预览
+./run3.8_unwrap_burst_parallel.sh 1 0.1 2022005_2022017
+
+# 5 个并行正式解缠
+./run3.8_unwrap_burst_parallel.sh 2 5 0.1
+```
+
+如需裁剪雷达范围，可在最后增加 `xmin/xmax/ymin/ymax`。Mode 2 通过 `nohup` 后台运行：
+
+```bash
+tail -f burst/run3.8_unwrap_burst_parallel.nohup.log
+```
+
+中断后使用完全相同的 Mode 2 命令重跑。脚本会跳过参数一致且已有完整 `unwrap.grd`、`unwrap.pdf` 的干涉对。
+
+### Run 3.9：匹配相关性网格
+
+```bash
+# 抽查 5 个干涉对
+./run3.9_match_corr_to_unwrap_burst.sh 0 20 5
+
+# 20 个并行正式处理全部干涉对
+./run3.9_match_corr_to_unwrap_burst.sh 1 20
+```
+
+正式模式使 `corr.grd` 与对应 `unwrap.grd` 的范围、分辨率、行列数和注册方式一致，不修改 `unwrap.grd`。
+
+## 5. 可选 DEM 改正与参考区归零
+
+不需要该改正时，跳过本节并直接运行 Run 4。
+
+```bash
+# 10 个并行，6 参数 DEM 误差模型
+./run3.10_dem_correction_parallel_all_in_one.sh 10 6
+
+# 强制指定稳定参考区
+./run3.11_reference_dem_correct_parallel.sh 10 10000/10096/5000/5024
+```
+
+Run 3.10 输出 `unwrap_dem_correct.grd`；Run 3.11 从用户指定的雷达坐标窗口计算中位数并生成 `unwrap_dem_correct_pin_up.grd`。参考区必须位于稳定且有效的相位区域。
+
+## 6. Run 4：直接 SBAS 主线
+
+```bash
+# Run 4.1：检查并正式准备网络
+./run4.1_prepare_sbas_network_burst.sh
+./run4.1_prepare_sbas_network_burst.sh 1
+
+# Run 4.2：检查并生成 SBAS 表格；38° 入射角，平滑 1.0
+./run4.2_generate_sbas_tables_burst.sh
+./run4.2_generate_sbas_tables_burst.sh 1 38 1.0
+
+# Run 4.3：检查并由脚本通过 nohup 提交 SBAS
+./run4.3_sbas_parallel_burst.sh
+./run4.3_sbas_parallel_burst.sh 1
+tail -f sbas_burst/run4.3_sbas_parallel.log
+
+# Run 4.4：检查并正式投影速度
+./run4.4_geocode_sbas_velocity_burst.sh
+./run4.4_geocode_sbas_velocity_burst.sh 1
+```
+
+最终主要结果位于：
+
+```text
+sbas_burst/vel.grd
+sbas_burst/vel_ll.grd
+sbas_burst/vel_ll.pdf
+sbas_burst/vel_ll KML/KMZ products
+```
+
+## 7. Run 4：可选 pin 改正 SBAS
+
+只有全部干涉对均已有 `unwrap_dem_correct_pin_up.grd` 时才使用：
+
+```bash
+./run4.1_prepare_sbas_network_pin_burst.sh
+./run4.1_prepare_sbas_network_pin_burst.sh 1
+./run4.2_generate_sbas_tables_pin_burst.sh
+./run4.2_generate_sbas_tables_pin_burst.sh 1 38 1.0
+./run4.3_sbas_parallel_pin_burst.sh
+./run4.3_sbas_parallel_pin_burst.sh 1
+./run4.4_geocode_sbas_velocity_pin_burst.sh
+./run4.4_geocode_sbas_velocity_pin_burst.sh 1
+```
+
+该路线的输出目录是 `sbas_burst_pin/`。不要在一次 SBAS 反演中混用 `sbas_burst/` 和 `sbas_burst_pin/` 的文件。
+
+## 8. 使用原则
+
+- 有检查或预览模式时，先检查再正式运行。
+- 继续下一步前检查 DEM、时空基线、SNAPHU 输入和失败清单。
+- `run*_failed_pairs.tsv` 非空时，先解决失败干涉对。
+- 后台任务未结束时不要重复启动相同步骤。
+- 根据 CPU、内存和磁盘读写能力调整并行数；并行数过大不一定更快。
+- 保留 inventory、manifest、参数记录和 `run*.complete`，后续脚本会使用它们验证流程状态。
 

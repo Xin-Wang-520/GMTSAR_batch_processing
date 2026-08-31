@@ -1,3 +1,134 @@
+<a id="english"></a>
+
+[English](#english) | [中文](#中文说明)
+
+# Sentinel-1 GMTSAR SBAS Batch Processing Workflow
+
+This directory provides a reusable batch workflow for Sentinel-1 TOPS processing with GMTSAR. It covers ASF download validation, SAFE extraction and cleanup, frame organization, DEM preparation, preprocessing, interferogram generation, IW1/IW2/IW3 merging, unwrapping, SBAS inversion, seasonal-signal removal and GNSS referencing.
+
+Author: Xin Wang, University of Science and Technology of China (USTC), Hefei, China
+
+## English quick navigation
+
+- [Directory layout](#english-directory-layout)
+- [Processing stages](#english-processing-stages)
+- [Recommended commands](#english-recommended-commands)
+- [Parallel processing and restart rules](#english-parallel-processing-and-restart-rules)
+- [Open the complete Chinese guide](#中文说明)
+
+<a id="english-directory-layout"></a>
+
+## Directory layout
+
+Runs 1.1–1.3 prepare downloaded Sentinel-1 products in the data directory:
+
+```text
+/data2/xinw/HMF_Sentinel1_data/Descending/T34/
+├── zip/
+├── T34_SAFE/
+├── run1.1_download_S1.py
+├── run1.2_unzip_S1.sh
+└── run1.3_remove_VH_keep_VV_delete_zip_S1.sh
+```
+
+Run 2 and all later GMTSAR steps are performed in the track-processing directory:
+
+```text
+/data2/xinw/InSAR_processing/Descending/T34/
+├── organized/
+├── topo/
+├── F1/
+├── F2/
+├── F3/
+├── merge/
+├── sbas_demcorr_pin/
+└── GNSS2LOS_correction/
+```
+
+The GMTSAR directory reads the cleaned SAFE products but never writes processing results back into the original Sentinel-1 data directory.
+
+<a id="english-processing-stages"></a>
+
+## Processing stages
+
+| Stage | Main task | Main products |
+| --- | --- | --- |
+| Run 1.1 | Download or re-download failed Sentinel-1 ZIP files | validated ZIP files |
+| Run 1.2 | Preview/formally extract ZIP files and validate SAFE structure | `T*_SAFE/*.SAFE`, `failed_zip.txt` |
+| Run 1.3 | Remove VH, keep VV and safely remove verified ZIP files | VV-only SAFE stack |
+| Run 2.1 | Build `SAFE_filelist` and download orbit files | SAFE list and EOF files |
+| Run 2.2 | Preview and organize TOPS frames by date | organized frame directories |
+| Run 2.3 | Derive DEM bounds from frame XML files | `topo/dem.grd` and DEM PDF |
+| Run 2.4 | Create F1/F2/F3 and link IW, EOF and DEM inputs | `F1/raw`, `F2/raw`, `F3/raw` |
+| Run 3.1 | Generate `data.in` and select the temporal-middle master | `F*/raw/data.in` |
+| Run 3.2 | Preprocess and align F1/F2/F3 | PRM, LED, SLC and baseline tables |
+| Run 3.3 | Preview and confirm the interferogram network | `intf.in`, config and baseline PDF |
+| Run 3.4 | Convert DEM to master-image radar coordinates | `topo_ra.grd` and `trans.dat` |
+| Run 3.5 | Generate and validate interferograms | `F*/intf_all/<pair>/` |
+| Run 3.6 | Preview seams and merge F1/F2/F3 | `merge/<pair>/` |
+| Run 3.7–3.9 | Plot merged products and build coherence/land masks | QC plots and mask grids |
+| Run 3.10 | Preview SNAPHU inputs and perform resumable unwrapping | `unwrap.grd`, `unwrap.pdf` |
+| Run 3.11–3.13 | Generate radar DEM, correct DEM error and apply reference area | corrected unwrap grids |
+| Run 4.1–4.4 | Prepare, run and geocode SBAS | displacement/velocity grids, PDF and KML |
+| Run 5.1–5.4 | Remove seasonal components and rebuild velocity | deseasoned displacement/velocity |
+| Run 6.1–6.9 | Grid GNSS, project to LOS and reference InSAR | GNSS-corrected displacement/velocity |
+
+<a id="english-recommended-commands"></a>
+
+## Recommended commands
+
+Run every script without arguments first when it provides a check or command-guide mode. Use formal mode only after the reported inputs and parameters are correct.
+
+```bash
+# Original-data directory
+./run1.1_download_S1.py
+./run1.2_unzip_S1.sh
+./run1.2_unzip_S1.sh 1
+./run1.3_remove_VH_keep_VV_delete_zip_S1.sh
+./run1.3_remove_VH_keep_VV_delete_zip_S1.sh --delete
+
+# Track-processing directory
+./run2.1_prepare_SAFE_orbits.sh
+./run2.1_prepare_SAFE_orbits.sh 1
+./run2.2_organize_frames.sh 1
+./run2.2_organize_frames.sh 2
+./run2.3_prepare_topo_DEM.py 1
+./run2.3_prepare_topo_DEM.py 2
+./run3.1_prep_data_F123.sh
+./run3.1_prep_data_F123.sh 1
+./run3.2_preproc_batch_tops_F123.sh 5 1
+./run3.3_make_intf_config_F123.sh 1 60 150
+./run3.3_make_intf_config_F123.sh 2
+./run3.5_intf_tops_parallel_F123.sh 5
+./run3.8_stack_coherence_mask_parallel.sh 0.075 50 5
+./run3.9_make_landmask_ra.sh 1
+./run3.10_unwrap_merge_parallel.sh 1 0.0001
+./run3.10_unwrap_merge_parallel.sh 2 5 0.0001
+```
+
+For Run 3.13, the reference area is mandatory and must be selected from a stable radar-coordinate region. Review all quality-control plots before SBAS.
+
+The complete argument descriptions, server examples, output inventories and troubleshooting notes are provided in the [Chinese section](#中文说明).
+
+<a id="english-parallel-processing-and-restart-rules"></a>
+
+## Parallel processing and restart rules
+
+- Reduce parallel job counts on computers with limited CPU, memory or disk throughput.
+- A large job count does not always make processing faster; GMT grids can be limited by disk I/O.
+- Preview/check modes do not modify processing products.
+- Resumable scripts validate existing outputs and process only missing or incomplete records.
+- Preserve `run*.complete`, manifests, inventories and failure reports for later validation.
+- Treat every non-empty failure report as unresolved until its log has been inspected.
+- Do not start a second formal process while an existing PID from the same run is active.
+
+---
+
+<a id="中文说明"></a>
+
+[Back to English](#english) | [中文](#中文说明)
+
+
 # Sentinel-1 GMTSAR 时序批处理流程
 
 本说明书用于持续整理 Sentinel-1 数据从 ASF 下载、SAFE 解压与清理、GMTSAR 分帧处理、拼接、干涉、解缠到 SBAS 时序反演的自动化脚本。所有脚本按 `run1`、`run2`、`run3`……的顺序逐步定稿，并同步记录输入、输出、运行方式、日志和断点续跑方法。
