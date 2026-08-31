@@ -1,0 +1,27 @@
+# Build SAT_llt2rat_para in any writable directory on the Linux server.
+#
+# The default GMTSAR root matches the kaiyang server. Override it if needed:
+#   make -f Makefile.SAT_llt2rat_para
+#   make -f Makefile.SAT_llt2rat_para GMTSAR_ROOT=/another/GMTSAR
+
+GMTSAR_ROOT ?= /home/linuxbrew/softwares/GMTSAR
+
+include $(GMTSAR_ROOT)/config.mk
+
+INCLUDES = $(GMT_INC) -I$(GMTSAR_ROOT)/gmtsar -I$(TIFF_INC)
+TARGET = SAT_llt2rat_para
+GMTSAR_LIBRARY = $(GMTSAR_ROOT)/gmtsar/libgmtsar.$(LIBEXT)
+
+.PHONY: all clean
+
+all: $(TARGET)
+
+$(TARGET): $(TARGET).o $(GMTSAR_LIBRARY)
+	$(CC) $(LDFLAGS) -fopenmp $< $(GMTSAR) $(GMT_LIB) $(LALIBS) \
+		$(LIBS) -L$(TIFF_LIB) -ltiff -lm -fopenmp -o $@
+
+$(TARGET).o: $(TARGET).c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -O3 -fopenmp -c $< -o $@
+
+clean:
+	rm -f $(TARGET).o $(TARGET)
