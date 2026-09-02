@@ -60,7 +60,7 @@ require_track_root() {
 
 find_template() {
     find "${MERGE_DIR}" -mindepth 2 -maxdepth 2 -type f \
-        -path "${MERGE_DIR}/20*/phasefilt.grd" -print | sort | head -n 1
+        -path "${MERGE_DIR}/20*/phasefilt.grd" -print | sort | sed -n '1p'
 }
 
 grid_signature() {
@@ -115,7 +115,7 @@ if (( $# == 1 )); then
     [[ "$1" == '1' ]] || die "MODE must be 1"
 fi
 
-for command_name in awk basename find gmt head sort wc; do
+for command_name in awk basename find gmt head sed sort wc; do
     command -v "${command_name}" >/dev/null 2>&1 ||
         die "required command not found: ${command_name}"
 done
