@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run 6.9: geocode GNSS-corrected and removed-correction velocity grids.
 # Modified by Xin Wang, USTC, Hefei, China
-# Last updated: August 24, 2026
+# Last updated: September 16, 2026
 
 set -euo pipefail
 export LC_ALL=C LANG=C LANGUAGE=C
@@ -26,6 +26,13 @@ Formal run with the recommended 400 m spatial filter:
 Formal run with another filter distance:
   ./run6.9_geocode_GNSS_corrected_velocity.sh 1 600
 
+Formal run with a 400 m filter and a fixed -10 to 10 mm/yr colorbar:
+  ./run6.9_geocode_GNSS_corrected_velocity.sh 1 400 10
+
+Arguments after mode 1:
+  argument 2: spatial filter distance in meters (default: 400)
+  argument 3: positive symmetric colorbar maximum in mm/yr (default: 5)
+
 Outputs:
   GNSS2LOS_correction/GNSS_corrected_displacement/vel_gnssref_5km_80km_ll.grd
   GNSS2LOS_correction/GNSS_corrected_displacement/vel_diff_smooth80km_full_ll.grd
@@ -38,9 +45,19 @@ USAGE
 
 MODE="${1:-}"
 FILTER="${2:-$DEFAULT_FILTER}"
-(( $# <= 2 )) || { usage; die "too many arguments"; }
+COLORBAR_MAX="${3:-}"
+(( $# <= 3 )) || { usage; die "too many arguments"; }
 [[ -z "$MODE" || "$MODE" == "1" ]] || { usage; die "use no argument or mode 1"; }
 [[ "$FILTER" =~ ^[1-9][0-9]*$ ]] || die "filter distance must be a positive integer in meters"
+if [[ -n "$COLORBAR_MAX" ]]; then
+    awk -v x="$COLORBAR_MAX" 'BEGIN{exit !(x ~ /^[0-9]*\.?[0-9]+$/ && x+0>0)}' ||
+        die "colorbar maximum must be a positive number in mm/yr"
+    CPT_MAX="$(awk -v x="$COLORBAR_MAX" 'BEGIN{printf "%.12g", x+0}')"
+    CPT_MIN="$(awk -v x="$COLORBAR_MAX" 'BEGIN{printf "%.12g", -(x+0)}')"
+fi
+awk -v lo="$CPT_MIN" -v hi="$CPT_MAX" -v step="$CPT_STEP" \
+    'BEGIN{exit !(lo+0 < hi+0 && step+0 > 0)}' ||
+    die "invalid CPT range/step: $CPT_MIN / $CPT_MAX / $CPT_STEP"
 
 ROOT="$(pwd -P)"
 TRACK="$(basename -- "$ROOT")"
@@ -175,6 +192,9 @@ cat > "$RUN6_DIR/run6.9_complete" <<EOF
 Run 6.9 completed successfully
 track=$TRACK
 filter_meters=$FILTER
+plot_color_min=$CPT_MIN
+plot_color_max=$CPT_MAX
+plot_color_step=$CPT_STEP
 corrected_velocity_ll=$OUT1
 correction_velocity_ll=$OUT2
 corrected_velocity_pdf=$PDF1
