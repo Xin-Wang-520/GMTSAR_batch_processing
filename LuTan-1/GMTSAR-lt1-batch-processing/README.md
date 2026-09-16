@@ -14,10 +14,10 @@ Author: Xin Wang, University of Science and Technology of China (USTC), Hefei, C
 
 The repository contains two satellite families:
 
-- **Sentinel-1:** the existing full-frame, burst, and full-resolution cut-SLC workflows in the repository root;
-- **LuTan-1:** this independent `GMTSAR-lt1-batch-processing/` workflow.
+- **Sentinel-1:** the full-frame, burst, and full-resolution cut-SLC workflows under `Sentinel-1/`;
+- **LuTan-1:** this independent `LuTan-1/GMTSAR-lt1-batch-processing/` workflow.
 
-The Sentinel-1 directories remain at their existing paths so previously shared links and script references continue to work. The repository-level README provides separate Sentinel-1 and LuTan-1 navigation.
+The repository now separates the two satellite families into top-level `Sentinel-1/` and `LuTan-1/` directories. Relative links among the Sentinel-1 workflows remain within the same satellite directory.
 
 ## Processing chain
 
@@ -129,10 +129,10 @@ The repository does not include GMTSAR, GMT, SNAPHU, raw LT-1 products, precise-
 
 建议按卫星分开理解和使用：
 
-- **Sentinel-1：**仓库根目录中已有的完整分帧、单 Burst 和全分辨率裁剪流程；
-- **陆探一号：**本目录 `GMTSAR-lt1-batch-processing/` 中的独立流程。
+- **Sentinel-1：**位于 `Sentinel-1/` 下的完整分帧、单 Burst 和全分辨率裁剪流程；
+- **陆探一号：**位于 `LuTan-1/GMTSAR-lt1-batch-processing/` 中的独立流程。
 
-这次不移动已有 Sentinel-1 目录，避免以前分享的 GitHub 链接和脚本路径失效；仓库首页已经为 Sentinel-1 和陆探一号分别设置入口。
+仓库现在使用顶层 `Sentinel-1/` 和 `LuTan-1/` 目录将两个卫星流程完全分开；Sentinel-1 各流程之间的相对位置保持不变。
 
 ## 处理链
 

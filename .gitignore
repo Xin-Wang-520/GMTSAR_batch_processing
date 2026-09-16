@@ -5,4 +5,4 @@ __pycache__/
 gmt.history
 
 # Local processing inputs and generated products are not source code.
-GMTSAR-lt1-batch-processing/data/
+LuTan-1/GMTSAR-lt1-batch-processing/data/

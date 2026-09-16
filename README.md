@@ -14,25 +14,27 @@ Author: Xin Wang, University of Science and Technology of China (USTC), Hefei, C
 
 ```text
 GMTSAR_batch_processing/
-├── GMTSAR_batch_scripts/             # Sentinel-1 full-frame IW1/IW2/IW3 workflow
-├── GMTSAR_burst_batch_scripts/       # Sentinel-1 single-burst workflow
-├── GMTSAR_cut_slc_full_resolution_scripts/ # Sentinel-1 cut-SLC workflow
-├── GMTSAR_support_scripts/           # Sentinel-1 helpers and accelerated programs
-└── GMTSAR-lt1-batch-processing/      # LuTan-1 stripmap workflow
+├── Sentinel-1/
+│   ├── GMTSAR_batch_scripts/                   # full-frame IW1/IW2/IW3 workflow
+│   ├── GMTSAR_burst_batch_scripts/             # single-burst workflow
+│   ├── GMTSAR_cut_slc_full_resolution_scripts/ # cut-SLC workflow
+│   └── GMTSAR_support_scripts/                 # helpers and accelerated programs
+└── LuTan-1/
+    └── GMTSAR-lt1-batch-processing/            # LT-1 stripmap workflow
 ```
 
 ## Choose a satellite workflow
 
 | Satellite | Workflow | Documentation |
 |---|---|---|
-| Sentinel-1 | Full IW1/IW2/IW3 frames | [Open workflow](GMTSAR_batch_scripts/) |
-| Sentinel-1 | Single burst/subswath | [Open workflow](GMTSAR_burst_batch_scripts/) |
-| Sentinel-1 | Full-resolution cut SLC | [Open workflow](GMTSAR_cut_slc_full_resolution_scripts/) |
-| LuTan-1 | LT-1A/LT-1B stripmap SLC | [Open bilingual workflow](GMTSAR-lt1-batch-processing/) |
+| Sentinel-1 | Full IW1/IW2/IW3 frames | [Open workflow](Sentinel-1/GMTSAR_batch_scripts/) |
+| Sentinel-1 | Single burst/subswath | [Open workflow](Sentinel-1/GMTSAR_burst_batch_scripts/) |
+| Sentinel-1 | Full-resolution cut SLC | [Open workflow](Sentinel-1/GMTSAR_cut_slc_full_resolution_scripts/) |
+| LuTan-1 | LT-1A/LT-1B stripmap SLC | [Open bilingual workflow](LuTan-1/GMTSAR-lt1-batch-processing/) |
 
 ### Full-frame workflow
 
-[`GMTSAR_batch_scripts/`](GMTSAR_batch_scripts/) processes Sentinel-1 data through the following stages:
+[`Sentinel-1/GMTSAR_batch_scripts/`](Sentinel-1/GMTSAR_batch_scripts/) processes Sentinel-1 data through the following stages:
 
 ```text
 ASF download and SAFE validation
@@ -50,12 +52,12 @@ ASF download and SAFE validation
 
 Documentation:
 
-- [Full-frame README — English first, 中文可跳转](GMTSAR_batch_scripts/README.md)
-- [Detailed Chinese processing manual](GMTSAR_batch_scripts/Sentinel_GMTSAR_batch_proeessing.md)
+- [Full-frame README — English first, 中文可跳转](Sentinel-1/GMTSAR_batch_scripts/README.md)
+- [Detailed Chinese processing manual](Sentinel-1/GMTSAR_batch_scripts/Sentinel_GMTSAR_batch_proeessing.md)
 
 ### Single-burst workflow
 
-[`GMTSAR_burst_batch_scripts/`](GMTSAR_burst_batch_scripts/) processes one common Sentinel-1 burst/subswath stack without merging IW1/IW2/IW3.
+[`Sentinel-1/GMTSAR_burst_batch_scripts/`](Sentinel-1/GMTSAR_burst_batch_scripts/) processes one common Sentinel-1 burst/subswath stack without merging IW1/IW2/IW3.
 
 ```text
 SAFE/orbit validation
@@ -71,12 +73,12 @@ SAFE/orbit validation
 
 Documentation:
 
-- [Burst README — English first, 中文可跳转](GMTSAR_burst_batch_scripts/README.md)
-- [Complete bilingual burst manual](GMTSAR_burst_batch_scripts/Sentinel_GMTSAR_burst_batch_processing.md)
+- [Burst README — English first, 中文可跳转](Sentinel-1/GMTSAR_burst_batch_scripts/README.md)
+- [Complete bilingual burst manual](Sentinel-1/GMTSAR_burst_batch_scripts/Sentinel_GMTSAR_burst_batch_processing.md)
 
 ### Support programs
 
-[`GMTSAR_support_scripts/`](GMTSAR_support_scripts/) contains custom tools used by selected processing steps, including:
+[`Sentinel-1/GMTSAR_support_scripts/`](Sentinel-1/GMTSAR_support_scripts/) contains custom tools used by selected processing steps, including:
 
 - parallel `SAT_llt2rat` and `dem2topo_ra` support;
 - TOPS frame organization and preprocessing helpers;
@@ -87,7 +89,7 @@ Some support programs require compilation or installation in a user-controlled `
 
 ### LuTan-1 workflow
 
-[`GMTSAR-lt1-batch-processing/`](GMTSAR-lt1-batch-processing/) provides the independent LT-1A/LT-1B stripmap workflow:
+[`LuTan-1/GMTSAR-lt1-batch-processing/`](LuTan-1/GMTSAR-lt1-batch-processing/) provides the independent LT-1A/LT-1B stripmap workflow:
 
 ```text
 archive extraction and SLC generation
@@ -102,8 +104,8 @@ archive extraction and SLC generation
 
 Documentation:
 
-- [LuTan-1 README — English first, 中文可跳转](GMTSAR-lt1-batch-processing/README.md)
-- [Detailed Chinese processing manual](GMTSAR-lt1-batch-processing/LT1_GMTSAR_批处理说明书.md)
+- [LuTan-1 README — English first, 中文可跳转](LuTan-1/GMTSAR-lt1-batch-processing/README.md)
+- [Detailed Chinese processing manual](LuTan-1/GMTSAR-lt1-batch-processing/LT1_GMTSAR_批处理说明书.md)
 
 ## Quick start
 
@@ -117,21 +119,21 @@ cd GMTSAR_batch_processing
 Copy the required workflow scripts into a track-processing directory, or run them from a location that preserves their expected relative paths. Make scripts executable:
 
 ```bash
-chmod +x GMTSAR_batch_scripts/run*.sh
-chmod +x GMTSAR_batch_scripts/run*.py
-chmod +x GMTSAR_burst_batch_scripts/run*.sh
-chmod +x GMTSAR_burst_batch_scripts/run*.py
-chmod +x GMTSAR_burst_batch_scripts/*.csh
-chmod +x GMTSAR-lt1-batch-processing/run*.sh
-chmod +x GMTSAR-lt1-batch-processing/run*.py
+chmod +x Sentinel-1/GMTSAR_batch_scripts/run*.sh
+chmod +x Sentinel-1/GMTSAR_batch_scripts/run*.py
+chmod +x Sentinel-1/GMTSAR_burst_batch_scripts/run*.sh
+chmod +x Sentinel-1/GMTSAR_burst_batch_scripts/run*.py
+chmod +x Sentinel-1/GMTSAR_burst_batch_scripts/*.csh
+chmod +x LuTan-1/GMTSAR-lt1-batch-processing/run*.sh
+chmod +x LuTan-1/GMTSAR-lt1-batch-processing/run*.py
 ```
 
 Read the workflow-specific README before processing:
 
 ```text
-Full IW1/IW2/IW3 frames → GMTSAR_batch_scripts/README.md
-Single burst            → GMTSAR_burst_batch_scripts/README.md
-LuTan-1 stripmap        → GMTSAR-lt1-batch-processing/README.md
+Full IW1/IW2/IW3 frames → Sentinel-1/GMTSAR_batch_scripts/README.md
+Single burst            → Sentinel-1/GMTSAR_burst_batch_scripts/README.md
+LuTan-1 stripmap        → LuTan-1/GMTSAR-lt1-batch-processing/README.md
 ```
 
 ## Main dependencies
@@ -180,25 +182,27 @@ If these scripts contribute to a publication, cite the relevant GMTSAR, GMT, GNU
 
 ```text
 GMTSAR_batch_processing/
-├── GMTSAR_batch_scripts/             # Sentinel-1 完整 F1/F2/F3 流程
-├── GMTSAR_burst_batch_scripts/       # Sentinel-1 单 Burst 流程
-├── GMTSAR_cut_slc_full_resolution_scripts/ # Sentinel-1 全分辨率裁剪流程
-├── GMTSAR_support_scripts/           # Sentinel-1 辅助和并行加速程序
-└── GMTSAR-lt1-batch-processing/      # 陆探一号条带模式流程
+├── Sentinel-1/
+│   ├── GMTSAR_batch_scripts/                   # 完整 F1/F2/F3 流程
+│   ├── GMTSAR_burst_batch_scripts/             # 单 Burst 流程
+│   ├── GMTSAR_cut_slc_full_resolution_scripts/ # 全分辨率裁剪流程
+│   └── GMTSAR_support_scripts/                 # 辅助和并行加速程序
+└── LuTan-1/
+    └── GMTSAR-lt1-batch-processing/            # 陆探一号条带模式流程
 ```
 
 ## 选择卫星流程
 
 | 卫星 | 流程 | 说明书入口 |
 |---|---|---|
-| Sentinel-1 | 完整 IW1/IW2/IW3 分帧 | [进入流程](GMTSAR_batch_scripts/) |
-| Sentinel-1 | 单 Burst／单子条带 | [进入流程](GMTSAR_burst_batch_scripts/) |
-| Sentinel-1 | 全分辨率裁剪 SLC | [进入流程](GMTSAR_cut_slc_full_resolution_scripts/) |
-| 陆探一号 | LT-1A/LT-1B 条带模式 SLC | [进入中英文流程](GMTSAR-lt1-batch-processing/) |
+| Sentinel-1 | 完整 IW1/IW2/IW3 分帧 | [进入流程](Sentinel-1/GMTSAR_batch_scripts/) |
+| Sentinel-1 | 单 Burst／单子条带 | [进入流程](Sentinel-1/GMTSAR_burst_batch_scripts/) |
+| Sentinel-1 | 全分辨率裁剪 SLC | [进入流程](Sentinel-1/GMTSAR_cut_slc_full_resolution_scripts/) |
+| 陆探一号 | LT-1A/LT-1B 条带模式 SLC | [进入中英文流程](LuTan-1/GMTSAR-lt1-batch-processing/) |
 
 ### 完整 F1/F2/F3 流程
 
-[`GMTSAR_batch_scripts/`](GMTSAR_batch_scripts/) 包括：
+[`Sentinel-1/GMTSAR_batch_scripts/`](Sentinel-1/GMTSAR_batch_scripts/) 包括：
 
 ```text
 ASF 下载和 SAFE 检查
@@ -216,21 +220,21 @@ ASF 下载和 SAFE 检查
 
 说明书：
 
-- [完整分帧流程 README（English 在前，可跳转中文）](GMTSAR_batch_scripts/README.md)
-- [详细中文处理说明书](GMTSAR_batch_scripts/Sentinel_GMTSAR_batch_proeessing.md)
+- [完整分帧流程 README（English 在前，可跳转中文）](Sentinel-1/GMTSAR_batch_scripts/README.md)
+- [详细中文处理说明书](Sentinel-1/GMTSAR_batch_scripts/Sentinel_GMTSAR_batch_proeessing.md)
 
 ### 单 Burst 流程
 
-[`GMTSAR_burst_batch_scripts/`](GMTSAR_burst_batch_scripts/) 用于处理一个共同 Burst／子条带时序，不进行 IW1/IW2/IW3 拼接。
+[`Sentinel-1/GMTSAR_burst_batch_scripts/`](Sentinel-1/GMTSAR_burst_batch_scripts/) 用于处理一个共同 Burst／子条带时序，不进行 IW1/IW2/IW3 拼接。
 
 说明书：
 
-- [Burst README（English 在前，可跳转中文）](GMTSAR_burst_batch_scripts/README.md)
-- [Burst 完整中英文说明书](GMTSAR_burst_batch_scripts/Sentinel_GMTSAR_burst_batch_processing.md)
+- [Burst README（English 在前，可跳转中文）](Sentinel-1/GMTSAR_burst_batch_scripts/README.md)
+- [Burst 完整中英文说明书](Sentinel-1/GMTSAR_burst_batch_scripts/Sentinel_GMTSAR_burst_batch_processing.md)
 
 ### 支持程序
 
-[`GMTSAR_support_scripts/`](GMTSAR_support_scripts/) 保存部分步骤使用的自定义程序，包括：
+[`Sentinel-1/GMTSAR_support_scripts/`](Sentinel-1/GMTSAR_support_scripts/) 保存部分步骤使用的自定义程序，包括：
 
 - 并行 `SAT_llt2rat` 和 `dem2topo_ra` 支持程序；
 - TOPS 分帧和并行预处理辅助脚本；
@@ -241,12 +245,12 @@ ASF 下载和 SAFE 检查
 
 ### 陆探一号流程
 
-[`GMTSAR-lt1-batch-processing/`](GMTSAR-lt1-batch-processing/) 是独立的 LT-1A/LT-1B 条带模式流程，覆盖解压、SLC 与轨道、DEM 与雷达 ROI、先裁剪再配准、干涉与解缠、去趋势与稳定区参考、SBAS 速度和点时序。
+[`LuTan-1/GMTSAR-lt1-batch-processing/`](LuTan-1/GMTSAR-lt1-batch-processing/) 是独立的 LT-1A/LT-1B 条带模式流程，覆盖解压、SLC 与轨道、DEM 与雷达 ROI、先裁剪再配准、干涉与解缠、去趋势与稳定区参考、SBAS 速度和点时序。
 
 说明书：
 
-- [陆探一号 README（English 在前，可跳转中文）](GMTSAR-lt1-batch-processing/README.md)
-- [详细中文处理说明书](GMTSAR-lt1-batch-processing/LT1_GMTSAR_批处理说明书.md)
+- [陆探一号 README（English 在前，可跳转中文）](LuTan-1/GMTSAR-lt1-batch-processing/README.md)
+- [详细中文处理说明书](LuTan-1/GMTSAR-lt1-batch-processing/LT1_GMTSAR_批处理说明书.md)
 
 ## 快速开始
 
@@ -260,21 +264,21 @@ cd GMTSAR_batch_processing
 赋予脚本执行权限：
 
 ```bash
-chmod +x GMTSAR_batch_scripts/run*.sh
-chmod +x GMTSAR_batch_scripts/run*.py
-chmod +x GMTSAR_burst_batch_scripts/run*.sh
-chmod +x GMTSAR_burst_batch_scripts/run*.py
-chmod +x GMTSAR_burst_batch_scripts/*.csh
-chmod +x GMTSAR-lt1-batch-processing/run*.sh
-chmod +x GMTSAR-lt1-batch-processing/run*.py
+chmod +x Sentinel-1/GMTSAR_batch_scripts/run*.sh
+chmod +x Sentinel-1/GMTSAR_batch_scripts/run*.py
+chmod +x Sentinel-1/GMTSAR_burst_batch_scripts/run*.sh
+chmod +x Sentinel-1/GMTSAR_burst_batch_scripts/run*.py
+chmod +x Sentinel-1/GMTSAR_burst_batch_scripts/*.csh
+chmod +x LuTan-1/GMTSAR-lt1-batch-processing/run*.sh
+chmod +x LuTan-1/GMTSAR-lt1-batch-processing/run*.py
 ```
 
 开始处理前，根据数据类型阅读对应说明书：
 
 ```text
-完整 IW1/IW2/IW3 分帧 → GMTSAR_batch_scripts/README.md
-单 Burst             → GMTSAR_burst_batch_scripts/README.md
-陆探一号条带模式       → GMTSAR-lt1-batch-processing/README.md
+完整 IW1/IW2/IW3 分帧 → Sentinel-1/GMTSAR_batch_scripts/README.md
+单 Burst             → Sentinel-1/GMTSAR_burst_batch_scripts/README.md
+陆探一号条带模式       → LuTan-1/GMTSAR-lt1-batch-processing/README.md
 ```
 
 ## 主要依赖
