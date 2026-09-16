@@ -62,6 +62,7 @@ The GMTSAR directory reads the cleaned SAFE products but never writes processing
 | Run 2.4 | Create F1/F2/F3 and link IW, EOF and DEM inputs | `F1/raw`, `F2/raw`, `F3/raw` |
 | Run 3.1 | Generate `data.in` and select the temporal-middle master | `F*/raw/data.in` |
 | Run 3.2 | Preprocess and align F1/F2/F3 | PRM, LED, SLC and baseline tables |
+| Run 3.2.2 | Recover only orbit-basename mismatch failures from Run 3.2 | corrected `data.in` and completed missing PRM/LED/SLC |
 | Run 3.3 | Preview and confirm the interferogram network | `intf.in`, config and baseline PDF |
 | Run 3.4 | Convert DEM to master-image radar coordinates | `topo_ra.grd` and `trans.dat` |
 | Run 3.5 | Generate and validate interferograms | `F*/intf_all/<pair>/` |
@@ -97,6 +98,9 @@ Run every script without arguments first when it provides a check or command-gui
 ./run3.1_prep_data_F123.sh
 ./run3.1_prep_data_F123.sh 1
 ./run3.2_preproc_batch_tops_F123.sh 5 1
+# Only after Run 3.2 reports an EOF-basename mismatch:
+./run3.2.2_repair_orbits_resume_F123.sh 1
+./run3.2.2_repair_orbits_resume_F123.sh 2 5 1
 ./run3.3_make_intf_config_F123.sh 1 60 150
 ./run3.3_make_intf_config_F123.sh 2
 ./run3.5_intf_tops_parallel_F123.sh 5
@@ -105,6 +109,14 @@ Run every script without arguments first when it provides a check or command-gui
 ./run3.10_unwrap_merge_parallel.sh 1 0.0001
 ./run3.10_unwrap_merge_parallel.sh 2 5 0.0001
 ```
+
+Run 3.9 first calls `landmask.csh` with the complete phase-grid region and
+inspects the generated west and south bounds with `gmt grdinfo -C`. If either
+lower bound differs from the template lower bound (normally zero), the script
+expands only that input bound by four radar-coordinate units (`0` becomes
+`-4`) and runs `landmask.csh` again. It then uses nearest-neighbor resampling
+against the template grid and requires the final region, increments,
+dimensions and registration to match exactly.
 
 For Run 3.13, the reference area is mandatory and must be selected from a stable radar-coordinate region. Review all quality-control plots before SBAS.
 
@@ -118,6 +130,7 @@ The complete argument descriptions, server examples, output inventories and trou
 - A large job count does not always make processing faster; GMT grids can be limited by disk I/O.
 - Preview/check modes do not modify processing products.
 - Resumable scripts validate existing outputs and process only missing or incomplete records.
+- Run 3.2.2 is an exceptional recovery step, not a normal mandatory stage. Use it only when Run 3.2 reports `Orbit file missing`, while an EOF with the same `V<start>_<end>` validity interval already exists under `F*/raw`.
 - Preserve `run*.complete`, manifests, inventories and failure reports for later validation.
 - Treat every non-empty failure report as unresolved until its log has been inspected.
 - Do not start a second formal process while an existing PID from the same run is active.
@@ -187,13 +200,14 @@ run1.3_remove_VH_keep_VV_delete_zip_S1.sh
 ├── Run 2.4 建立 F1/F2/F3 → 链接对应 IW、EOF 和 DEM
 ├── Run 3.1 对 F1/F2/F3 运行 prep_data_linux.csh → 中间记录移到 data.in 首行
 ├── Run 3.2 同时预处理 F1/F2/F3 → 检查 PRM/LED/SLC 和 baseline_table.dat
+├── Run 3.2.2（仅异常恢复）按 EOF 有效期修正轨道名 → 只补跑 Run 3.2 缺失日期
 ├── Run 3.3 预览并确认 F1 时空基线网络 → 生成 F1/F2/F3 的 intf.in 和配置
 ├── Run 3.4 将 DEM 转换到 F1/F2/F3 主影像雷达坐标
 ├── Run 3.5 并行生成 F1/F2/F3 干涉图并逐对验证
 ├── Run 3.6 预览拼接缝 → 正式拼接全部 F1/F2/F3 干涉对
 ├── Run 3.7 检查并抽样绘制拼接后的 corr/phasefilt
 ├── Run 3.8 叠加全部 corr → 生成 mean_corr.grd 和 mask_def.grd
-├── Run 3.9 生成与相位网格一致的 landmask_ra.grd
+├── Run 3.9 检查下边界并在必要时以 -4 重跑 → 生成与相位网格一致的 landmask_ra.grd
 ├── Run 3.10 预览组合掩膜输入 → 可续跑并行 SNAPHU 解缠
 ├── Run 3.11 生成与解缠网格一致的雷达坐标 DEM 并链接到全部干涉对
 ├── Run 3.12 使用全局模型或 2000px 局部模型改正 DEM 相关误差
@@ -2566,6 +2580,82 @@ F3/raw/preproc_all.log
 
 ---
 
+## Run 3.2.2：修正 EOF 文件名并补跑 Run 3.2 失败日期
+
+Run 3.2.2 是异常恢复步骤，不是正常流程中每次都必须运行的步骤。仅在以下条件同时满足时使用：
+
+- Run 3.2 最终报告一个或多个 frame 失败；
+- `F*/raw/preproc_all.log` 中出现 `Orbit file missing`；
+- 日志指定的完整 EOF 文件名不存在；
+- `F*/raw` 中已经存在另一个具有完全相同 `V开始时间_结束时间` 的 EOF，只是 `OPOD_生成时间` 或完整文件名不同。
+
+例如，下面两个文件的生成时间不同，但轨道有效期完全相同，可以替换：
+
+```text
+data.in 指定：
+S1A_OPER_AUX_POEORB_OPOD_20260518T111244_V20251006T225942_20251008T005942.EOF
+
+实际已存在：
+S1A_OPER_AUX_POEORB_OPOD_20251027T070555_V20251006T225942_20251008T005942.EOF
+```
+
+如果同一有效期的 EOF 确实不存在，应返回 Run 2.1 下载轨道，不能使用 Run 3.2.2 代替轨道下载。如果 Run 3.2 正常完成，也不需要运行 Run 3.2.2。Run 3.2 已加入条件提示：仅当失败日志包含 `Orbit file missing` 时，终端才显示 Run 3.2.2 的两步命令。
+
+### 模式 1：只检查替换关系
+
+```bash
+./run3.2.2_repair_orbits_resume_F123.sh 1
+```
+
+模式 1 对 F1/F2/F3 执行以下只读检查：
+
+1. 读取 `F*/raw/data.in` 中不存在的完整 EOF 名称；
+2. 提取 EOF 名称中的 `V开始时间_结束时间`；
+3. 在相同 `raw/` 中查找这一有效期对应的实际 EOF；
+4. 显示“原 EOF 名称 → 实际 EOF 名称”；
+5. 检查每期 PRM、LED、SLC，列出待补跑日期；
+6. 报告 `unresolved` 数量。
+
+该模式不会修改 `data.in`，也不会启动预处理。必须确认 F1/F2/F3 均为 `unresolved=0`，才能进入模式 2。若同一有效期存在多个候选轨道，脚本停止而不自动猜测。
+
+### 模式 2：正式替换并并行补跑
+
+与标准 Run 3.2 的 `5 1` 配置对应的恢复命令为：
+
+```bash
+./run3.2.2_repair_orbits_resume_F123.sh 2 5 1
+```
+
+参数依次表示：正式恢复模式、每个 frame 最多 5 个任务、标准预处理模式。若原 Run 3.2 使用中位数 ESD，则运行：
+
+```bash
+./run3.2.2_repair_orbits_resume_F123.sh 2 5 2 1
+```
+
+模式 2 会：
+
+- 首次运行时将完整原始列表保存为 `F*/raw/data.in.before_run3.2.2`；
+- 将确认过的实际 EOF 名称原子更新到 `F*/raw/data.in`；
+- 仅把缺少 PRM、LED 或 SLC 的日期写入待处理列表；
+- 保留主影像记录作为待处理列表第一行；
+- F1/F2/F3 同时运行，每个 frame 内部最多运行指定数量的日期任务；
+- 处理结束后用全部 PRM 重建 `baseline_table.dat`，并按完整 `data.in` 重新验证 PRM、LED、SLC 和基线记录数量。
+
+默认 `5` 线程时最大活动任务数约为 `3 × 5 = 15`。已经具有完整 PRM、LED、SLC 的日期不会重新处理。
+
+主要记录文件：
+
+```text
+F*/raw/data.in.before_run3.2.2
+F*/raw/run3.2.2_orbit_replacements.tsv
+F*/raw/run3.2.2_pending_data.in
+F*/raw/run3.2.2_preproc.log
+```
+
+模式 2 完成且 F1/F2/F3 全部通过验证后，再继续 Run 3.3。
+
+---
+
 ## Run 3.3：生成 F1/F2/F3 的 intf.in 和 batch_tops.config
 
 Run 3.2 完成后，在轨道根目录运行：
@@ -3061,14 +3151,28 @@ cd /data2/xinw/InSAR_processing/Descending/T34
 landmask.csh <雷达坐标范围>
 ```
 
-再使用 `gmt grdsample -R<模板网格>` 使陆地掩膜的范围、间隔、行列数和注册方式与 `phasefilt.grd` 完全一致。输出：
+第一次生成 `landmask_ra.grd` 后，脚本立即运行 `gmt grdinfo -C`，读取去掉文件名后的第一和第三个边界值，即 west 和 south，并与模板的 west/south 下界比较。模板通常是：
+
+```text
+0/EAST/0/NORTH
+```
+
+如果第一次结果的 west 与模板不一致，只把输入 west 从 `0` 扩展为 `-4`；如果 south 不一致，只把输入 south 从 `0` 扩展为 `-4`；两者都不一致时使用：
+
+```text
+-4/EAST/-4/NORTH
+```
+
+清理第一次生成的中间掩膜后重新运行一次 `landmask.csh`。如果 west 和 south 第一次就与模板一致，则不重复计算。终端会显示 `Template bounds`、`First generated bounds`、是否触发 `[RETRY]`，以及重跑后的 `Regenerated bounds`。
+
+重跑后先确认生成网格完整覆盖模板，再使用 `gmt grdsample -R<模板网格> -nn` 进行最近邻重采样，使陆地掩膜的范围、间隔、行列数和注册方式与 `phasefilt.grd` 完全一致。输出：
 
 ```text
 merge/landmask_ra.grd
 merge/landmask_ra.pdf
 ```
 
-PDF 中灰色表示海洋、背景或NaN，红色表示陆地。正式运行会替换旧的陆地掩膜结果并清理 `landmask.grd`、XYZ和重采样临时文件。
+PDF 中灰色表示海洋、背景或NaN，红色表示陆地。正式运行会替换旧的陆地掩膜结果，并清理第一次生成、边界重跑和最终重采样产生的临时文件。
 
 ## Run 3.10：预览 SNAPHU 输入并并行解缠
 
@@ -3523,7 +3627,7 @@ ps -p $(cat sbas_demcorr_pin/run4.3_sbas_parallel.pid)
 
 如果 PID 对应的任务仍在运行，脚本拒绝重复提交。旧的日志、PID 和提交记录会在下一次正式提交前移动到带时间戳的 run4.3_backup_* 目录。Run 4.3 只负责安全提交和记录进程；SBAS 结果完整性检查将在后续步骤继续补充。
 
-## Run 4.4：投影 SBAS 速度并生成 PDF/KML
+## Run 4.4：投影 SBAS 速度并生成 PDF/PNG/KML/KMZ
 
 在轨道根目录执行无参数检查：
 
@@ -3531,23 +3635,38 @@ ps -p $(cat sbas_demcorr_pin/run4.3_sbas_parallel.pid)
 ./run4.4_geocode_sbas_velocity.sh
 ~~~
 
-它检查 `sbas_demcorr_pin/vel.grd`、大于 20 MiB 的 `merge/trans.dat`、`F1/intf_all/20*/gauss_400` 和相关 GMTSAR/GMT 命令，不创建或修改结果。正式运行默认使用 400 m 空间滤波：
+它检查 `sbas_demcorr_pin/vel.grd`、大于 20 MiB 的 `merge/trans.dat`、首个 F1 干涉对中可用的 `gauss_*` 和相关 GMTSAR/GMT 命令，不创建或修改结果。正式运行默认自动选择滤波：
 
 ~~~bash
 ./run4.4_geocode_sbas_velocity.sh 1
 ~~~
 
-脚本在 `sbas_demcorr_pin/` 链接 `trans.dat` 和 `gauss_400`，生成：
+自动模式会扫描 `F1/intf_all/<first_pair>/gauss_*`，优先选择 `gauss_100`；如不存在，则选择与 100 m 最接近的实际可用滤波。`gauss_` 后面的数字会直接作为 `proj_ra2ll.csh` 的滤波参数。也可手动指定：
+
+~~~bash
+./run4.4_geocode_sbas_velocity.sh 1 400
+~~~
+
+第三个参数可手动指定对称速度色标的绝对最大值，例如 `10` 表示 `-10～+10 mm/yr`：
+
+~~~bash
+./run4.4_geocode_sbas_velocity.sh 1 400 10
+~~~
+
+如不给第三个参数，脚本根据 `vel_ll.grd` 的最大绝对值四舍五入后自动生成对称色标。脚本在 `sbas_demcorr_pin/` 链接 `trans.dat` 和选中的 `gauss_<filter>`，生成：
 
 ~~~text
-vel_ll.grd             使用 400 m 空间滤波的经纬度速度，供 KML 使用
-vel_ll.cpt             默认 -10/10/1 的 jet 色标
+vel_ll.grd             使用自动或手动滤波的经纬度速度
+vel_ll.cpt             自动对称或手动对称的 jet 色标
 vel_ll.pdf             GMT 绘制的经纬度速度图
-vel_ll.kml             以及 grd2kml.csh 生成的配套文件
+vel_ll_map.png         GMT 普通地图 PNG
+vel_ll.kml             Google Earth KML
+vel_ll.png             Google Earth 透明叠加 PNG
+vel_ll.kmz             包含 doc.kml 和 vel_ll.png，可直接打开
 run4.4_complete        完成记录
 ~~~
 
-默认色标范围可用 `VEL_CPT_MIN`、`VEL_CPT_MAX` 和 `VEL_CPT_STEP` 环境变量修改。重复正式运行时，脚本直接删除并重新生成上一轮 Run 4.4 产品，不建立备份目录。PDF 标题固定为 `SBAS velocity`。
+可用 `VEL_FILTER_PREFERRED=100`、`VEL_CPT_ABS_MAX`、`VEL_CPT_STEP` 和 `VEL_CPT_TICK` 环境变量调整默认值。重复正式运行时，脚本直接删除并重新生成上一轮 Run 4.4 产品，不建立备份目录。PDF 标题固定为 `SBAS velocity`。
 
 ## Run 5.1：并行去除位移时间序列中的季节项
 

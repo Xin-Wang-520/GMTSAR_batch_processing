@@ -415,6 +415,11 @@ set -e
 printf '%s\n' '========================================'
 if (( FAILED_FRAMES > 0 )); then
     printf '[ERROR] Run 3.5 finished with %d failed frame(s).\n' "${FAILED_FRAMES}" >&2
+    if [[ -x "${ROOT_DIR}/run3.5.2_retry_failed_pairs_F123.sh" ]]; then
+        printf '%s\n' '[NEXT] Preview and retry only the failed pairs:' >&2
+        printf '%s\n' '  ./run3.5.2_retry_failed_pairs_F123.sh 1' >&2
+        printf '%s\n' '  nohup ./run3.5.2_retry_failed_pairs_F123.sh 2 > run3.5.2_retry_failed_pairs.nohup.log 2>&1 &' >&2
+    fi
     exit 1
 fi
 

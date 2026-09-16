@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Modified by Xin Wang, USTC, Hefei, China
-# Last updated: July 21, 2026
+# Last updated: September 14, 2026
 
 set -euo pipefail
 
@@ -19,12 +19,14 @@ usage() {
   ./run2.1_prepare_SAFE_orbits.sh [选项]       # 只检查和预览
   ./run2.1_prepare_SAFE_orbits.sh 1 [选项]     # 正式生成清单并下载轨道
 
-在 InSAR_processing/Descending/T*/ 中运行：创建 organized/、生成
-SAFE_filelist，并调用 download_sentinel_orbits_linux_new.csh 下载轨道文件。
+在 InSAR_processing/Descending/T*/、InSAR_processing/Ascending/T*/ 或
+InSAR_processing/T*/ 中运行：创建 organized/、生成 SAFE_filelist，并调用
+download_sentinel_orbits_linux_new.csh 下载轨道文件。
 
 选项：
   --mode 1|2           1=POEORB 精密轨道（默认），2=RESORB 快速轨道
   --source-safe DIR    清理后 SAFE 来源目录
+  --direction DIR      Ascending 或 Descending；路径中没有方向时可明确指定
   --organized-dir DIR  输出目录（默认：organized）
   --downloader FILE    轨道下载 csh 脚本或 PATH 中的命令
   -h, --help           显示帮助
@@ -34,8 +36,10 @@ EOF
 RUN_FORMAL=0
 ORBIT_MODE=1
 SOURCE_SAFE=""
+DIRECTION_OPTION=""
 ORGANIZED_DIR="organized"
 DOWNLOADER="download_sentinel_orbits_linux_new.csh"
+DATA_ROOT="${RUN21_DATA_ROOT:-/data2/xinw}"
 
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -52,6 +56,11 @@ while [[ "$#" -gt 0 ]]; do
         --source-safe)
             [[ "$#" -ge 2 ]] || die "--source-safe requires a directory"
             SOURCE_SAFE="$2"
+            shift 2
+            ;;
+        --direction)
+            [[ "$#" -ge 2 ]] || die "--direction requires Ascending or Descending"
+            DIRECTION_OPTION="$2"
             shift 2
             ;;
         --organized-dir)
@@ -75,6 +84,9 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 [[ "${ORBIT_MODE}" == "1" || "${ORBIT_MODE}" == "2" ]] || die "--mode must be 1 or 2"
+[[ -z "${DIRECTION_OPTION}" || "${DIRECTION_OPTION}" == "Ascending" || \
+   "${DIRECTION_OPTION}" == "Descending" ]] ||
+    die "--direction must be Ascending or Descending"
 
 for command_name in find sort awk grep sed wget unzip date wc tee; do
     command -v "${command_name}" >/dev/null 2>&1 ||
@@ -83,15 +95,62 @@ done
 
 WORK_DIR="$(pwd -P)"
 TRACK="$(basename -- "${WORK_DIR}")"
-DIRECTION="$(basename -- "$(dirname -- "${WORK_DIR}")")"
+PARENT_NAME="$(basename -- "$(dirname -- "${WORK_DIR}")")"
 [[ "${TRACK}" =~ ^T[0-9]+$ ]] ||
     die "run this script in a T-number directory (current: ${WORK_DIR})"
 
+if [[ -n "${DIRECTION_OPTION}" ]]; then
+    DIRECTION="${DIRECTION_OPTION}"
+elif [[ "${PARENT_NAME}" == "Ascending" || "${PARENT_NAME}" == "Descending" ]]; then
+    DIRECTION="${PARENT_NAME}"
+else
+    DIRECTION="AUTO"
+fi
+
 if [[ -z "${SOURCE_SAFE}" ]]; then
-    SOURCE_SAFE="/data2/xinw/HMF_Sentinel1_data/${DIRECTION}/${TRACK}/${TRACK}_SAFE"
+    if [[ "${DIRECTION}" == "AUTO" ]]; then
+        SEARCH_DIRECTIONS=(Ascending Descending)
+    else
+        SEARCH_DIRECTIONS=("${DIRECTION}")
+    fi
+
+    SAFE_CANDIDATES=()
+    CHECKED_CANDIDATES=()
+    for data_name in HMF_Sentinel_data HMF_Sentinel1_data; do
+        for candidate_direction in "${SEARCH_DIRECTIONS[@]}"; do
+            candidate="${DATA_ROOT}/${data_name}/${candidate_direction}/${TRACK}/${TRACK}_SAFE"
+            CHECKED_CANDIDATES+=("${candidate}")
+            if [[ -d "${candidate}" ]]; then
+                SAFE_CANDIDATES+=("${candidate}")
+            fi
+        done
+    done
+
+    if (( ${#SAFE_CANDIDATES[@]} == 0 )); then
+        printf '[ERROR] SAFE source directory was not found. Checked:\n' >&2
+        printf '  %s\n' "${CHECKED_CANDIDATES[@]}" >&2
+        printf '[HINT] Specify it explicitly with --source-safe DIR.\n' >&2
+        exit 1
+    elif (( ${#SAFE_CANDIDATES[@]} > 1 )); then
+        printf '[ERROR] Multiple SAFE source directories were found:\n' >&2
+        printf '  %s\n' "${SAFE_CANDIDATES[@]}" >&2
+        printf '[HINT] Select one with --source-safe DIR or --direction Ascending|Descending.\n' >&2
+        exit 1
+    fi
+
+    SOURCE_SAFE="${SAFE_CANDIDATES[0]}"
 fi
 
 [[ -d "${SOURCE_SAFE}" ]] || die "SAFE source directory not found: ${SOURCE_SAFE}"
+SOURCE_SAFE="$(cd -- "${SOURCE_SAFE}" && pwd -P)"
+
+if [[ "${DIRECTION}" == "AUTO" ]]; then
+    case "/${SOURCE_SAFE}/" in
+        */Ascending/*) DIRECTION="Ascending" ;;
+        */Descending/*) DIRECTION="Descending" ;;
+        *) DIRECTION="not specified" ;;
+    esac
+fi
 
 if [[ -x "${DOWNLOADER}" ]]; then
     DOWNLOADER_PATH="$(cd -- "$(dirname -- "${DOWNLOADER}")" && pwd -P)/$(basename -- "${DOWNLOADER}")"
@@ -132,6 +191,7 @@ printf 'SAFE source    : %s\n' "${SOURCE_SAFE}"
 printf 'SAFE total     : %d\n' "${SAFE_TOTAL}"
 printf 'Organized dir  : %s\n' "${ORGANIZED_ABS}"
 printf 'SAFE list      : %s\n' "${SAFE_LIST}"
+printf 'Orbit log      : %s\n' "${ORBIT_LOG}"
 printf 'Existing list  : %s\n' "${EXISTING_LIST}"
 printf 'Existing EOF   : %d\n' "${EXISTING_EOF}"
 printf 'Orbit mode     : %s (%s)\n' "${ORBIT_MODE}" \
@@ -187,12 +247,18 @@ mv -f -- "${SAFE_LIST_TMP}" "${SAFE_LIST}"
     printf 'Direction      : %s\n' "${DIRECTION}"
     printf 'SAFE source    : %s\n' "${SOURCE_SAFE}"
     printf 'SAFE list      : %s\n' "${SAFE_LIST}"
+    printf 'Orbit log      : %s\n' "${ORBIT_LOG}"
     printf 'SAFE total     : %d\n' "${SAFE_TOTAL}"
     printf 'Orbit mode     : %s\n' "${ORBIT_MODE}"
     printf 'Downloader     : %s\n' "${DOWNLOADER_PATH}"
     printf 'Start time     : %s\n' "$(date '+%F %T')"
     printf '%s\n' '========================================'
 } | tee "${SUMMARY_LOG}"
+
+printf '[RUN] Orbit downloader is running; output is being written to:\n'
+printf '  %s\n' "${ORBIT_LOG}"
+printf '[MONITOR] From another terminal, run:\n'
+printf '  tail -f %q\n' "${ORBIT_LOG}"
 
 set +e
 (

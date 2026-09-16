@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Modified by Xin Wang, USTC, Hefei, China
-# Last updated: August 29, 2026
+# Last updated: September 15, 2026
 
 set -euo pipefail
 
@@ -22,9 +22,11 @@ Usage:
 No argument checks F1/F2/F3 inputs and prints the command guide only.
 Mode 1 formally performs the following processing:
   1. validates F1/raw, F2/raw, and F3/raw links;
-  2. runs prep_data_linux.csh in each raw directory;
-  3. saves the original data.in as data.in.orig;
-  4. moves the middle (or middle-front) data.in record to line 1.
+  2. builds orbits.list from the local F*/raw/*.EOF links;
+  3. confirms every acquisition date has a matching local orbit;
+  4. runs prep_data_linux.csh in each raw directory;
+  5. saves the original data.in as data.in.orig;
+  6. moves the middle (or middle-front) data.in record to line 1.
 EOF
 }
 
@@ -127,13 +129,82 @@ process_frame() {
             data.in.orig \
             data.in.before_middle_first \
             prep_data.log \
+            run3.1_missing_orbits.tsv \
             orbit.list \
             orbits.list \
             SAFE.list \
             safe.list \
             raw.list
 
-        printf '[3] Run prep_data_linux.csh\n'
+        printf '[3] Build orbits.list from local EOF links\n'
+        shopt -s nullglob nocasematch
+        xml_files=( *iw*vv*.xml )
+        eof_files=( *.EOF )
+        shopt -u nullglob
+
+        (( ${#xml_files[@]} > 0 )) || {
+            printf '[FAIL] no VV XML files found in %s\n' "${raw_dir}" >&2
+            exit 1
+        }
+        (( ${#eof_files[@]} > 0 )) || {
+            printf '[FAIL] no local EOF orbit files found in %s\n' "${raw_dir}" >&2
+            exit 1
+        }
+
+        printf '%s\n' "${eof_files[@]}" | sort -u > orbits.list
+        printf 'Local orbit filenames: %d\n' "$(wc -l < orbits.list | awk '{print $1}')"
+
+        orbit_requirements="$(mktemp .run3.1_orbit_requirements.XXXXXX)"
+        orbit_missing="$(mktemp .run3.1_missing_orbits.XXXXXX)"
+        trap 'rm -f -- "${orbit_requirements:-}" "${orbit_missing:-}"' EXIT
+        : > "${orbit_requirements}"
+        : > "${orbit_missing}"
+
+        for xml in "${xml_files[@]}"; do
+            xml_name="$(basename -- "${xml}")"
+            sat="${xml_name:0:3}"
+            acquisition_date="${xml_name:15:8}"
+            if [[ ! "${sat}" =~ ^s1[ab]$ || ! "${acquisition_date}" =~ ^[0-9]{8}$ ]]; then
+                printf '%s\t%s\t%s\n' \
+                    "INVALID_XML_NAME" "${xml_name}" "cannot parse satellite/date" \
+                    >> "${orbit_missing}"
+                continue
+            fi
+            printf '%s\t%s\n' "${sat^^}" "${acquisition_date}" >> "${orbit_requirements}"
+        done
+        sort -u -o "${orbit_requirements}" "${orbit_requirements}"
+
+        while IFS=$'\t' read -r sat acquisition_date; do
+            [[ -n "${sat}" && -n "${acquisition_date}" ]] || continue
+            orbit_start="$(date --date="${acquisition_date} - 1 day" +%Y%m%d)"
+            orbit_end="$(date --date="${acquisition_date} + 1 day" +%Y%m%d)"
+
+            if ! awk -v sat="${sat}" -v start="${orbit_start}" -v end="${orbit_end}" '
+                index($0, sat) && index($0, start) && index($0, end) { found=1; exit }
+                END { exit !found }
+            ' orbits.list; then
+                printf '%s\t%s\tV%s*_%s*\n' \
+                    "${acquisition_date}" "${sat}" "${orbit_start}" "${orbit_end}" \
+                    >> "${orbit_missing}"
+            fi
+        done < "${orbit_requirements}"
+
+        if [[ -s "${orbit_missing}" ]]; then
+            {
+                printf 'acquisition_date\tsatellite\texpected_orbit_validity_or_error\n'
+                cat "${orbit_missing}"
+            } > run3.1_missing_orbits.tsv
+            printf '[FAIL] Local orbit validation failed in %s\n' "${raw_dir}" >&2
+            printf '[FAIL] Report: %s/run3.1_missing_orbits.tsv\n' "${raw_dir}" >&2
+            sed -n '1,21p' run3.1_missing_orbits.tsv >&2
+            exit 1
+        fi
+
+        acquisition_count="$(wc -l < "${orbit_requirements}" | awk '{print $1}')"
+        printf '[ORBIT OK] All %d acquisition dates match local EOF orbit files.\n' \
+            "${acquisition_count}"
+
+        printf '[4] Run prep_data_linux.csh with the local orbit list\n'
         if ! prep_data_linux.csh > prep_data.log 2>&1; then
             printf '[FAIL] prep_data_linux.csh failed in %s\n' "${raw_dir}" >&2
             printf '[FAIL] Last 30 log lines:\n' >&2
@@ -146,7 +217,16 @@ process_frame() {
             exit 1
         }
 
-        printf '[4] Back up original data.in\n'
+        generated_records="$(wc -l < data.in | awk '{print $1}')"
+        if [[ "${generated_records}" -ne "${acquisition_count}" ]]; then
+            printf '[FAIL] data.in is incomplete in %s: expected %d records, found %d\n' \
+                "${raw_dir}" "${acquisition_count}" "${generated_records}" >&2
+            exit 1
+        fi
+        printf '[DATA OK] data.in contains all %d acquisition records.\n' \
+            "${generated_records}"
+
+        printf '[5] Back up original data.in\n'
         cp -p -- data.in data.in.orig
 
         nline="$(wc -l < data.in.orig | awk '{print $1}')"
@@ -161,7 +241,7 @@ process_frame() {
         else
             # Odd count: exact middle. Even count: middle-front record.
             mid=$(( (nline + 1) / 2 ))
-            printf '[5] Move original line %d to the first line\n' "${mid}"
+            printf '[6] Move original line %d to the first line\n' "${mid}"
 
             cp -p -- data.in.orig data.in.before_middle_first
             reorder_tmp="$(mktemp data.in.tmp.XXXXXX)"
@@ -187,7 +267,7 @@ process_frame() {
             }
         fi
 
-        printf '[6] data.in first five records:\n'
+        printf '[7] data.in first five records:\n'
         head -n 5 data.in
         printf '[DONE] %s completed; log: %s/prep_data.log\n' "${frame}" "${raw_dir}"
     )
@@ -223,9 +303,11 @@ if (( CHECK_ONLY == 1 )); then
     printf '  ./run3.1_prep_data_F123.sh 1\n\n'
     printf 'Mode 1 will, for each F1/F2/F3 raw directory:\n'
     printf '  1. remove old prep_data temporary outputs;\n'
-    printf '  2. run prep_data_linux.csh;\n'
-    printf '  3. create data.in and data.in.orig;\n'
-    printf '  4. move the middle (or middle-front) acquisition to line 1.\n'
+    printf '  2. build orbits.list from local EOF links;\n'
+    printf '  3. validate local orbit coverage for every acquisition date;\n'
+    printf '  4. run prep_data_linux.csh;\n'
+    printf '  5. create data.in and data.in.orig;\n'
+    printf '  6. move the middle (or middle-front) acquisition to line 1.\n'
     printf '%s\n' '========================================'
     if (( CHECK_FAILED == 0 )); then
         printf '[CHECK OK] F1/F2/F3 inputs are ready.\n'

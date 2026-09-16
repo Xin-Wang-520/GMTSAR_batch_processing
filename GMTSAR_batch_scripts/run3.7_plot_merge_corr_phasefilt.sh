@@ -13,6 +13,7 @@ export LANGUAGE=C
 OUTPUT_NAME="run3.7_corr_phasefilt_jpg"
 CHECK_MARKER="merge/run3.7_check_complete"
 MISSING_REPORT="merge/run3.7_missing_grids.tsv"
+DELETED_REPORT="merge/run3.7_deleted_incomplete_pairs.tsv"
 
 # Plot settings follow the Run 3.6 seam-check figures.
 PLOT_DPI="${RUN37_DPI:-120}"
@@ -37,11 +38,15 @@ Usage:
 No arguments:
   Print this guide. No check or plotting starts.
 
-Mode 1 - validate all merged interferograms:
-  Confirm that every merge/20* pair directory contains non-empty:
+Mode 1 - validate and clean merged interferograms:
+  Check that every merge/20* pair directory contains non-empty:
     corr.grd
     phasefilt.grd
-  No interferogram directories or grids are deleted.
+  If either grid is missing or empty, delete that incomplete merge/<pair>/
+  directory directly and then validate all remaining pairs again.
+  Deleted pairs are recorded in:
+    merge/run3.7_deleted_incomplete_pairs.tsv
+  Source interferograms under F1/F2/F3 are never deleted.
 
 Mode 2 - create JPG previews:
   No selector or yearly
@@ -249,24 +254,58 @@ make_pair_list "${ALL_PAIRS}"
 if [[ "${MODE}" == '1' ]]; then
     (( $# == 1 )) || die "mode 1 usage: ./run3.7_plot_merge_corr_phasefilt.sh 1"
 
-    if validate_merged_grids "${ALL_PAIRS}" "${TEMP_DIR}/missing.tsv"; then
-        rm -f -- "${MISSING_REPORT}"
-        {
-            date '+%Y-%m-%d %H:%M:%S'
-            printf 'pairs=%s\n' "$(wc -l < "${ALL_PAIRS}" | awk '{print $1}')"
-        } > "${CHECK_MARKER}"
-        printf 'Validation marker: %s/%s\n' "${ROOT_DIR}" "${CHECK_MARKER}"
-        printf '%s\n' '[NEXT] Recommended: plot the 25% and 75% pairs of every year:'
-        printf '%s\n' '  ./run3.7_plot_merge_corr_phasefilt.sh 2'
-        printf '%s\n' '[OTHER] Plot all pairs with five concurrent plotting jobs:'
-        printf '%s\n' '  ./run3.7_plot_merge_corr_phasefilt.sh 2 all 5'
-        exit 0
+    if ! validate_merged_grids "${ALL_PAIRS}" "${TEMP_DIR}/missing.tsv"; then
+        cp "${TEMP_DIR}/missing.tsv" "${MISSING_REPORT}"
+        rm -f -- "${CHECK_MARKER}"
+        printf 'Missing-grid report: %s/%s\n' "${ROOT_DIR}" "${MISSING_REPORT}" >&2
+
+        : > "${DELETED_REPORT}"
+        deleted_count=0
+
+        printf '\n%s\n' '[CLEANUP] Delete incomplete merged-pair directories'
+        while IFS=$'\t' read -r pair missing_csv; do
+            [[ -n "${pair}" ]] || continue
+            [[ "${pair}" =~ ^20[0-9]{5,7}_20[0-9]{5,7}$ ]] ||
+                die "refusing to delete invalid pair name from report: ${pair}"
+
+            pair_dir="merge/${pair}"
+            [[ -d "${pair_dir}" ]] ||
+                die "reported pair directory is no longer present: ${pair_dir}"
+
+            printf '[DELETE] %s  missing: %s\n' "${pair_dir}" "${missing_csv}"
+            rm -rf -- "${pair_dir}"
+            printf '%s\t%s\t%s\n' \
+                "${pair}" "${missing_csv}" "$(date '+%Y-%m-%d %H:%M:%S %z')" \
+                >> "${DELETED_REPORT}"
+            deleted_count=$((deleted_count + 1))
+        done < "${TEMP_DIR}/missing.tsv"
+
+        (( deleted_count > 0 )) ||
+            die "validation failed but no incomplete merged-pair directory was deleted"
+
+        printf '[CLEANUP OK] Deleted %d incomplete merged-pair directories.\n' \
+            "${deleted_count}"
+        printf 'Deletion report: %s/%s\n' "${ROOT_DIR}" "${DELETED_REPORT}"
+
+        printf '\n%s\n' '[RECHECK] Validate remaining merged interferograms'
+        make_pair_list "${ALL_PAIRS}"
+        if ! validate_merged_grids "${ALL_PAIRS}" "${TEMP_DIR}/missing_after_cleanup.tsv"; then
+            cp "${TEMP_DIR}/missing_after_cleanup.tsv" "${MISSING_REPORT}"
+            die "missing or empty grids remain after cleanup; inspect ${MISSING_REPORT}"
+        fi
     fi
 
-    cp "${TEMP_DIR}/missing.tsv" "${MISSING_REPORT}"
-    rm -f -- "${CHECK_MARKER}"
-    printf 'Missing-grid report: %s/%s\n' "${ROOT_DIR}" "${MISSING_REPORT}" >&2
-    exit 1
+    rm -f -- "${MISSING_REPORT}"
+    {
+        date '+%Y-%m-%d %H:%M:%S'
+        printf 'pairs=%s\n' "$(wc -l < "${ALL_PAIRS}" | awk '{print $1}')"
+    } > "${CHECK_MARKER}"
+    printf 'Validation marker: %s/%s\n' "${ROOT_DIR}" "${CHECK_MARKER}"
+    printf '%s\n' '[NEXT] Recommended: plot the 25% and 75% pairs of every year:'
+    printf '%s\n' '  ./run3.7_plot_merge_corr_phasefilt.sh 2'
+    printf '%s\n' '[OTHER] Plot all pairs with five concurrent plotting jobs:'
+    printf '%s\n' '  ./run3.7_plot_merge_corr_phasefilt.sh 2 all 5'
+    exit 0
 fi
 
 (( $# >= 1 && $# <= 3 )) ||

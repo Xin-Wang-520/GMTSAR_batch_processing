@@ -371,6 +371,20 @@ set -e
 printf '%s\n' '========================================'
 if (( FAILED > 0 )); then
     printf '[ERROR] Run 3.2 finished with %d failed frame(s).\n' "${FAILED}" >&2
+    if grep -q 'Orbit file missing:' F*/raw/preproc_all.log 2>/dev/null; then
+        printf '%s\n' '----------------------------------------' >&2
+        printf '[RECOVERY] One or more data.in EOF basenames were not found.\n' >&2
+        printf '[RECOVERY] If an EOF with the same V<start>_<end> validity interval already exists, use Run 3.2.2.\n' >&2
+        printf '[RECOVERY] First inspect replacements and pending acquisitions (no changes):\n' >&2
+        printf '  ./run3.2.2_repair_orbits_resume_F123.sh 1\n' >&2
+        printf '[RECOVERY] After confirming unresolved=0, repair names and rerun only incomplete dates:\n' >&2
+        printf '  ./run3.2.2_repair_orbits_resume_F123.sh 2 %s %s' "${NCORES}" "${MODE}" >&2
+        if [[ "${MODE}" == "2" ]]; then
+            printf ' %s' "${ESD_MODE}" >&2
+        fi
+        printf '\n' >&2
+        printf '[NOTE] Do not use Run 3.2.2 when Run 3.2 completes successfully.\n' >&2
+    fi
     exit 1
 fi
 printf '[DONE] Run 3.2 completed successfully for F1, F2, and F3.\n'

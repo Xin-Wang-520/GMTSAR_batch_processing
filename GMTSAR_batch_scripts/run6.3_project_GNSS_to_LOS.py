@@ -215,6 +215,7 @@ def plot_grid_with_gmt(
     orbit: str,
     track: float,
     look: float,
+    colorbar_max: float,
 ) -> None:
     if shutil.which("gmt") is None:
         die("gmt not found in PATH; cannot plot GNSS_to_LOS.pdf")
@@ -222,12 +223,15 @@ def plot_grid_with_gmt(
     plot_dir = work_dir / f".run6.3_plot.{os.getpid()}"
     plot_dir.mkdir(exist_ok=False)
     env = os.environ.copy()
+    colorbar_step = colorbar_max / 100.0
     env.update(
         {
             "GRID": str(grid_path.resolve()),
             "CPT": "GNSS_to_LOS.cpt",
             "PS": "GNSS_to_LOS.ps",
             "OUT_BASE": "GNSS_to_LOS",
+            "COLORBAR_MAX": f"{colorbar_max:.12g}",
+            "COLORBAR_STEP": f"{colorbar_step:.12g}",
             "PLOT_TITLE": (
                 f"GNSS to LOS velocity ({orbit}, "
                 f"track={track:g} deg, look={look:g} deg)"
@@ -236,7 +240,7 @@ def plot_grid_with_gmt(
     )
     commands = r'''
 set -euo pipefail
-gmt makecpt -Cjet -T-5/5/1 -Z -D > "$CPT"
+gmt makecpt -Cjet -T-"$COLORBAR_MAX"/"$COLORBAR_MAX"/"$COLORBAR_STEP" -Z -D > "$CPT"
 REGION="$(gmt grdinfo "$GRID" -C | awk 'NR==1{print $2"/"$3"/"$4"/"$5}')"
 gmt set \
     MAP_FRAME_TYPE plain \
@@ -254,7 +258,7 @@ gmt psscale \
     -R"$REGION" -JM15c \
     -DJBC+w10c/0.3c+h+o0c/1.0c \
     -C"$CPT" \
-    -Bxa5f1+l"LOS velocity (mm/yr)" \
+    -Baf+l"LOS velocity (mm/yr)" \
     -O >> "$PS"
 gmt psconvert "$PS" -Tf -A -F"$OUT_BASE"
 '''
@@ -289,8 +293,12 @@ def parse_args():
             "  ./run6.3_project_GNSS_to_LOS.py\n\n"
             "Formal ascending run (default track=350°, look=40°):\n"
             "  ./run6.3_project_GNSS_to_LOS.py 1 ascending\n\n"
-            "Formal descending run (default track=190°, look=40°):\n"
+            "Formal descending run (automatic symmetric colorbar):\n"
             "  ./run6.3_project_GNSS_to_LOS.py 1 descending\n\n"
+            "Use a fixed symmetric -5 to 5 mm/yr plot colorbar:\n"
+            "  ./run6.3_project_GNSS_to_LOS.py 1 descending 5\n\n"
+            "Use a symmetric -10 to 10 mm/yr plot colorbar:\n"
+            "  ./run6.3_project_GNSS_to_LOS.py 1 descending 10\n\n"
             "Override the default heading when a precise value is available:\n"
             "  ./run6.3_project_GNSS_to_LOS.py 1 descending --track 193 --look 40"
         ),
@@ -301,6 +309,16 @@ def parse_args():
         nargs="?",
         choices=("ascending", "descending"),
         help="orbit direction; required for a formal run",
+    )
+    parser.add_argument(
+        "colorbar_max",
+        nargs="?",
+        type=float,
+        default=None,
+        help=(
+            "fixed positive symmetric GMT colorbar limit in mm/yr; "
+            "if omitted, use max(abs(actual LOS minimum/maximum))"
+        ),
     )
     parser.add_argument(
         "--track",
@@ -337,6 +355,10 @@ def main() -> int:
         die("--track must be finite")
     if not np.isfinite(args.look) or not (0.0 < args.look < 90.0):
         die("--look must be between 0 and 90 degrees")
+    if args.colorbar_max is not None and (
+        not np.isfinite(args.colorbar_max) or args.colorbar_max <= 0.0
+    ):
+        die("COLORBAR_MAX must be a positive finite number")
 
     out_dir = Path(args.output_dir)
     if not out_dir.is_absolute():
@@ -388,7 +410,13 @@ def main() -> int:
         print(f"Detected direction: {orbit}")
         print(f"Check track       : {track:g} degrees")
         print(f"Look angle        : {args.look:g} degrees")
-        print("Plot color range  : -5 / 5 / 1 mm/yr (GMT jet)")
+        if args.colorbar_max is None:
+            print("Plot color range  : automatic symmetric range from formal LOS result")
+        else:
+            print(
+                "Plot color range  : "
+                f"-{args.colorbar_max:g} / {args.colorbar_max:g} mm/yr (GMT jet)"
+            )
         print(f"East coefficient  : {proj_e:.8f}")
         print(f"North coefficient : {proj_n:.8f}")
         print("Formula           : LOS = east_coefficient * E + north_coefficient * N")
@@ -401,9 +429,12 @@ def main() -> int:
         print("              default track=350 degrees, look=40 degrees")
         print("  Descending: ./run6.3_project_GNSS_to_LOS.py 1 descending")
         print("              default track=190 degrees, look=40 degrees")
+        print("              default colorbar=automatic symmetric LOS maximum")
         print("")
         print("For the current descending track, use:")
         print("  ./run6.3_project_GNSS_to_LOS.py 1 descending")
+        print("  ./run6.3_project_GNSS_to_LOS.py 1 descending 5   # colorbar=-5 to 5")
+        print("  ./run6.3_project_GNSS_to_LOS.py 1 descending 10  # colorbar=-10 to 10")
         print("")
         print("Override the heading/look angle when precise values are available:")
         print("  ./run6.3_project_GNSS_to_LOS.py 1 descending --track 193 --look 40")
@@ -433,7 +464,13 @@ def main() -> int:
     print(f"Orbit direction   : {orbit}")
     print(f"Track azimuth     : {track:g} degrees")
     print(f"Look angle        : {args.look:g} degrees")
-    print("Plot color range  : -5 / 5 / 1 mm/yr (GMT jet)")
+    if args.colorbar_max is None:
+        print("Plot color range  : automatic symmetric range from actual LOS values")
+    else:
+        print(
+            "Plot color range  : "
+            f"-{args.colorbar_max:g} / {args.colorbar_max:g} mm/yr (GMT jet)"
+        )
     print(f"East coefficient  : {proj_e:.8f}")
     print(f"North coefficient : {proj_n:.8f}")
     print("Formula           : LOS = east_coefficient * E + north_coefficient * N")
@@ -445,6 +482,19 @@ def main() -> int:
     los[valid] = proj_e * east[valid] + proj_n * north[valid]
     los_range = finite_range(los, "projected LOS grid")
     print(f"[RESULT] LOS range: {los_range[0]:.6f} / {los_range[1]:.6f} mm/yr")
+    if args.colorbar_max is None:
+        plot_colorbar_max = max(abs(los_range[0]), abs(los_range[1]))
+        if plot_colorbar_max == 0.0:
+            plot_colorbar_max = 1.0
+        colorbar_source = "automatic"
+    else:
+        plot_colorbar_max = args.colorbar_max
+        colorbar_source = "fixed"
+    print(
+        "[PLOT] Symmetric colorbar: "
+        f"-{plot_colorbar_max:g} / {plot_colorbar_max:g} mm/yr "
+        f"({colorbar_source})"
+    )
 
     tmp_grid = out_dir / f".run6.3_GNSS_to_LOS.{os.getpid()}.grd"
     tmp_pdf = out_dir / f".run6.3_GNSS_to_LOS.{os.getpid()}.pdf"
@@ -452,7 +502,14 @@ def main() -> int:
     final_pdf = out_dir / "GNSS_to_LOS.pdf"
     try:
         write_grid(tmp_grid, los, dims_e, coords_e, attrs_e, var_attrs_e, track, args.look)
-        plot_grid_with_gmt(tmp_grid, tmp_pdf, orbit, track, args.look)
+        plot_grid_with_gmt(
+            tmp_grid,
+            tmp_pdf,
+            orbit,
+            track,
+            args.look,
+            plot_colorbar_max,
+        )
         tmp_grid.replace(final_grid)
         tmp_pdf.replace(final_pdf)
     finally:
@@ -465,6 +522,9 @@ def main() -> int:
         f"orbit={orbit}\n"
         f"track={track}\n"
         f"look={args.look}\n"
+        f"plot_colorbar_source={colorbar_source}\n"
+        f"plot_colorbar_min={-plot_colorbar_max:.12g}\n"
+        f"plot_colorbar_max={plot_colorbar_max:.12g}\n"
         f"east_coefficient={proj_e:.12g}\n"
         f"north_coefficient={proj_n:.12g}\n"
         f"grid={final_grid}\n"

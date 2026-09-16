@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Modified by Xin Wang, USTC, Hefei, China
-# Last updated: July 24, 2026
+# Last updated: September 12, 2026
 #
 # Run 3.9: generate a radar-coordinate land mask in merge/.
 
@@ -35,12 +35,15 @@ Processing:
   1. Check merge/dem.grd and require merge/trans.dat > 20 MiB.
   2. Select the first sorted merge/20*/phasefilt.grd as the template.
   3. Read the template radar-coordinate region.
-  4. Run landmask.csh in merge/.
-  5. Resample landmask_ra.grd using -R<template_grid>; GMT copies the
+  4. Run landmask.csh once and inspect the generated west/south bounds.
+  5. If either generated lower bound does not cover the corresponding
+     template zero bound, change that input lower bound from 0 to -4 and
+     run landmask.csh again.
+  6. Resample landmask_ra.grd using -R<template_grid>; GMT copies the
      template region, increments and grid registration.
-  6. Confirm the output region, increments, dimensions and registration
+  7. Confirm the output region, increments, dimensions and registration
      match the template exactly.
-  7. Plot landmask_ra.pdf in radar coordinates with gray background/sea
+  8. Plot landmask_ra.pdf in radar coordinates with gray background/sea
      and red land pixels.
 
 Outputs:
@@ -154,6 +157,9 @@ cd "${MERGE_DIR}"
 
 REGION="$(gmt grdinfo "${TEMPLATE_REL}" -C | awk '{print $2 "/" $3 "/" $4 "/" $5}')"
 [[ "${REGION}" == */*/*/* ]] || die "failed to read region from ${TEMPLATE_REL}"
+read -r TEMPLATE_W TEMPLATE_E TEMPLATE_S TEMPLATE_N < <(
+    gmt grdinfo "${TEMPLATE_REL}" -C | awk '{print $2, $3, $4, $5; exit}'
+)
 
 printf '%s\n' '========================================'
 printf '%s\n' 'Run 3.9: make radar-coordinate land mask'
@@ -172,14 +178,65 @@ printf 'Command: landmask.csh %s\n' "${REGION}"
 landmask.csh "${REGION}"
 [[ -s landmask_ra.grd ]] || die "landmask.csh did not generate a non-empty landmask_ra.grd"
 
-printf '%s\n' '[STEP 3] Match the phasefilt.grd template grid exactly'
+printf '%s\n' '[STEP 3] Inspect the first generated landmask_ra.grd bounds'
+read -r LAND_W LAND_E LAND_S LAND_N < <(
+    gmt grdinfo landmask_ra.grd -C | awk '{print $2, $3, $4, $5; exit}'
+)
+printf 'Template bounds          : %s/%s/%s/%s\n' \
+    "${TEMPLATE_W}" "${TEMPLATE_E}" "${TEMPLATE_S}" "${TEMPLATE_N}"
+printf 'First generated bounds   : %s/%s/%s/%s\n' \
+    "${LAND_W}" "${LAND_E}" "${LAND_S}" "${LAND_N}"
+
+# landmask.csh can return a pixel-registered mask whose west or south bound
+# differs from the template zero bound. Expand only the affected input lower
+# bound by four radar-coordinate units (0 becomes -4), then generate again.
+RETRY_W="${TEMPLATE_W}"
+RETRY_S="${TEMPLATE_S}"
+NEED_RETRY=0
+if awk -v got="${LAND_W}" -v want="${TEMPLATE_W}" \
+    'BEGIN {delta=got-want; if (delta < 0) delta=-delta; exit !(delta > 1e-9)}'; then
+    RETRY_W="$(awk -v value="${TEMPLATE_W}" 'BEGIN {printf "%.12g", value-4}')"
+    NEED_RETRY=1
+fi
+if awk -v got="${LAND_S}" -v want="${TEMPLATE_S}" \
+    'BEGIN {delta=got-want; if (delta < 0) delta=-delta; exit !(delta > 1e-9)}'; then
+    RETRY_S="$(awk -v value="${TEMPLATE_S}" 'BEGIN {printf "%.12g", value-4}')"
+    NEED_RETRY=1
+fi
+
+if (( NEED_RETRY == 1 )); then
+    RETRY_REGION="${RETRY_W}/${TEMPLATE_E}/${RETRY_S}/${TEMPLATE_N}"
+    printf '%s\n' '[RETRY] The first generated west and/or south bound does not match the template.'
+    printf '[RETRY] Regenerate with expanded lower bound(s): %s\n' "${RETRY_REGION}"
+    rm -f -- landmask.grd landmask_ra.grd landmask_ra.xyz tmp.grd \
+        llr lla llr.grd lla.grd
+    landmask.csh "${RETRY_REGION}"
+    [[ -s landmask_ra.grd ]] || \
+        die "landmask.csh retry did not generate a non-empty landmask_ra.grd"
+    read -r LAND_W LAND_E LAND_S LAND_N < <(
+        gmt grdinfo landmask_ra.grd -C | awk '{print $2, $3, $4, $5; exit}'
+    )
+    printf 'Regenerated bounds       : %s/%s/%s/%s\n' \
+        "${LAND_W}" "${LAND_E}" "${LAND_S}" "${LAND_N}"
+else
+    printf '%s\n' '[BOUND OK] First generated lower bounds match the template; no retry needed.'
+fi
+
+awk -v w="${LAND_W}" -v e="${LAND_E}" -v s="${LAND_S}" -v n="${LAND_N}" \
+    -v tw="${TEMPLATE_W}" -v te="${TEMPLATE_E}" \
+    -v ts="${TEMPLATE_S}" -v tn="${TEMPLATE_N}" \
+    'BEGIN {exit !((w <= tw+1e-9) && (e >= te-1e-9) &&
+                    (s <= ts+1e-9) && (n >= tn-1e-9))}' || \
+    die "generated landmask_ra.grd does not cover the complete template region"
+
+printf '%s\n' '[STEP 4] Match the phasefilt.grd template grid exactly'
 printf 'Command: gmt grdsample landmask_ra.grd -R%s -Gtmp_landmask_ra.grd\n' \
     "${TEMPLATE_REL}"
-gmt grdsample landmask_ra.grd -R"${TEMPLATE_REL}" -Gtmp_landmask_ra.grd
+gmt grdsample landmask_ra.grd -R"${TEMPLATE_REL}" -nn -Gtmp_landmask_ra.grd
 [[ -s tmp_landmask_ra.grd ]] || die "GMT did not generate tmp_landmask_ra.grd"
 mv -f -- tmp_landmask_ra.grd landmask_ra.grd
 
-printf '%s\n' '[STEP 4] Validate the final grid geometry'
+printf '%s\n' '[STEP 5] Validate the final grid geometry'
 OUTPUT_SIGNATURE="$(grid_signature landmask_ra.grd)"
 [[ -n "${OUTPUT_SIGNATURE}" ]] || die "failed to read landmask_ra.grd information"
 printf 'Template signature : %s\n' "${TEMPLATE_SIGNATURE}"
@@ -189,7 +246,7 @@ printf 'Output signature   : %s\n' "${OUTPUT_SIGNATURE}"
 
 gmt grdinfo landmask_ra.grd
 
-printf '%s\n' '[STEP 5] Plot landmask_ra.pdf (gray background/sea, red land)'
+printf '%s\n' '[STEP 6] Plot landmask_ra.pdf (gray background/sea, red land)'
 rm -f -- landmask_ra.cpt landmask_ra.ps landmask_ra.pdf \
     gmt.conf gmt.history .gmtcommands4
 cat > landmask_ra.cpt <<'EOF_CPT'
@@ -219,8 +276,9 @@ gmt psconvert -Tf -P -A -Z landmask_ra.ps
 [[ -s landmask_ra.pdf ]] || die "landmask_ra.pdf was not generated"
 rm -f -- landmask_ra.cpt landmask_ra.ps gmt.conf gmt.history .gmtcommands4
 
-printf '%s\n' '[STEP 6] Remove intermediate land-mask files'
-rm -f -- landmask.grd landmask_ra.xyz tmp.grd tmp_landmask_ra.grd
+printf '%s\n' '[STEP 7] Remove intermediate land-mask files'
+rm -f -- landmask.grd landmask_ra.xyz tmp.grd tmp_landmask_ra.grd \
+    llr lla llr.grd lla.grd
 
 printf '%s\n' '========================================'
 printf '%s\n' '[DONE] Run 3.9 completed successfully.'

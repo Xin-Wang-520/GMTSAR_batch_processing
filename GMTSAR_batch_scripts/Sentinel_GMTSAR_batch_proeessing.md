@@ -24,13 +24,14 @@ Run 2 从数据准备目录的 `T34_SAFE/` 读取经过 Run 1.3 清理的 VV 数
 | Run 2.4 | `run2.4_link_raw_topo.sh` | 建立 F1/F2/F3 并链接对应 IW、EOF 和 DEM | 已通过隔离流程测试，待服务器实测 |
 | Run 3.1 | `run3.1_prep_data_F123.sh` | 对 F1/F2/F3 生成 `data.in` 并把中间记录移到首行 | 已通过隔离流程测试，待服务器实测 |
 | Run 3.2 | `run3.2_preproc_batch_tops_F123.sh` | 两层并行预处理 F1/F2/F3 并验证 PRM/LED/SLC | 已通过隔离流程测试，待服务器实测 |
+| Run 3.2.2 | `run3.2.2_repair_orbits_resume_F123.sh` | EOF 完整名称不一致时按有效期修正，并只补跑 Run 3.2 缺失日期 | 已完成隔离模拟测试，待服务器实测 |
 | Run 3.3 | `run3.3_make_intf_config_F123.sh` | 先预览 F1 时空基线网络，再生成 F1/F2/F3 的 `intf.in` 和配置文件 | 已通过隔离流程测试，待服务器实测 |
 | Run 3.4 | `run3.4_dem2topo_ra_F123.sh` / `run3.4_dem2topo_ra_parallel_F123.sh` | 生成 F1/F2/F3 雷达坐标地形，可选 OpenMP 加速 | 已建立 |
 | Run 3.5 | `run3.5_intf_tops_parallel_F123.sh` | 并行生成 F1/F2/F3 TOPS 干涉图 | 已建立并完成服务器批处理 |
 | Run 3.6 | `run3.6_merge_F123.sh` / `run3.6_merge_F123_parallel_trans.sh` | 预览拼接缝并正式拼接 F1/F2/F3 | 已建立并完成服务器批处理 |
 | Run 3.7 | `run3.7_plot_merge_corr_phasefilt.sh` | 检查并绘制拼接后的相关性和滤波相位 | 已建立 |
 | Run 3.8 | `run3.8_stack_coherence_mask_parallel.sh` | 并行计算平均相关性并生成 `mask_def.grd` | 已建立 |
-| Run 3.9 | `run3.9_make_landmask_ra.sh` | 生成雷达坐标陆地掩膜 | 已建立 |
+| Run 3.9 | `run3.9_make_landmask_ra.sh` | 检查下边界并在必要时以 -4 重跑，生成雷达坐标陆地掩膜 | 已建立 |
 | Run 3.10 | `run3.10_unwrap_merge_parallel.sh` | 预览 SNAPHU 输入并可续跑并行解缠 | 已建立 |
 | Run 3.11 | `run3.11_prepare_dem_ra_and_link.sh` | 生成统一雷达坐标 DEM、PDF 并链接到全部干涉对 | 已建立 |
 | Run 3.12 | `run3.12_dem_correction_parallel_all_in_one.sh` / `run3.12_dem_correction_matlablike_2000px_parallel_all.sh` | 全局或局部模型并行改正 DEM 相关误差 | 已建立 |
@@ -75,13 +76,14 @@ run1.3_remove_VH_keep_VV_delete_zip_S1.sh
 ├── Run 2.4 建立 F1/F2/F3 → 链接对应 IW、EOF 和 DEM
 ├── Run 3.1 对 F1/F2/F3 运行 prep_data_linux.csh → 中间记录移到 data.in 首行
 ├── Run 3.2 同时预处理 F1/F2/F3 → 检查 PRM/LED/SLC 和 baseline_table.dat
+├── Run 3.2.2（仅异常恢复）按 EOF 有效期替换轨道名 → 只补跑缺失日期
 ├── Run 3.3 预览并确认 F1 时空基线网络 → 生成 F1/F2/F3 的 intf.in 和配置
 ├── Run 3.4 将 DEM 转换到 F1/F2/F3 主影像雷达坐标
 ├── Run 3.5 并行生成 F1/F2/F3 干涉图并逐对验证
 ├── Run 3.6 预览拼接缝 → 正式拼接全部 F1/F2/F3 干涉对
 ├── Run 3.7 检查并抽样绘制拼接后的 corr/phasefilt
 ├── Run 3.8 叠加全部 corr → 生成 mean_corr.grd 和 mask_def.grd
-├── Run 3.9 生成与相位网格一致的 landmask_ra.grd
+├── Run 3.9 检查下边界并在必要时以 -4 重跑 → 生成与相位网格一致的 landmask_ra.grd
 ├── Run 3.10 预览组合掩膜输入 → 可续跑并行 SNAPHU 解缠
 ├── Run 3.11 生成与解缠网格一致的雷达坐标 DEM 并链接到全部干涉对
 ├── Run 3.12 使用全局模型或 2000px 局部模型改正 DEM 相关误差
@@ -894,6 +896,37 @@ F3/raw/preproc_all.log
 
 ---
 
+## Run 3.2.2：EOF 名称修复与失败日期补跑
+
+该脚本不是常规必跑步骤。只有 Run 3.2 失败、日志出现 `Orbit file missing`，并且本地已经存在相同 `V开始时间_结束时间` 的 EOF 时才使用。完整名称中的 `OPOD_生成时间` 可以不同；轨道是否覆盖该影像应以 `V..._...` 有效期为准。
+
+模式 1 只显示替换关系与待补跑日期，不修改任何输入：
+
+```bash
+./run3.2.2_repair_orbits_resume_F123.sh 1
+```
+
+只有 F1/F2/F3 都显示 `unresolved=0` 后，才正式执行模式 2：
+
+```bash
+./run3.2.2_repair_orbits_resume_F123.sh 2 5 1
+```
+
+模式 2 备份原 `data.in`，写入按有效期确认的实际 EOF 名称，并仅补跑缺少 PRM、LED 或 SLC 的日期。F1/F2/F3 同时运行，每个 frame 内部最多并行 5 个任务，因此默认最大并行量约为 15。完成后重新生成完整基线表并验证全部输出。
+
+生成或保留的恢复记录为：
+
+```text
+F*/raw/data.in.before_run3.2.2
+F*/raw/run3.2.2_orbit_replacements.tsv
+F*/raw/run3.2.2_pending_data.in
+F*/raw/run3.2.2_preproc.log
+```
+
+若相同有效期的 EOF 不存在，应重新执行 Run 2.1 下载轨道；若 Run 3.2 成功，则不运行 Run 3.2.2。Run 3.2 只在检测到这种轨道名称错误时显示恢复命令。
+
+---
+
 ## Run 3.3：生成干涉对列表和处理配置
 
 Run 3.2 完成后，从轨道根目录运行：
@@ -1366,14 +1399,28 @@ cd /data2/xinw/InSAR_processing/Descending/T34
 landmask.csh <雷达坐标范围>
 ```
 
-再使用 `gmt grdsample -R<模板网格>` 使陆地掩膜的范围、间隔、行列数和注册方式与 `phasefilt.grd` 完全一致。输出：
+第一次生成 `landmask_ra.grd` 后，脚本立即运行 `gmt grdinfo -C`，读取去掉文件名后的第一和第三个边界值，即 west 和 south，并与模板的 west/south 下界比较。模板通常是：
+
+```text
+0/EAST/0/NORTH
+```
+
+如果第一次结果的 west 与模板不一致，只把输入 west 从 `0` 扩展为 `-4`；如果 south 不一致，只把输入 south 从 `0` 扩展为 `-4`；两者都不一致时使用：
+
+```text
+-4/EAST/-4/NORTH
+```
+
+清理第一次生成的中间掩膜后重新运行一次 `landmask.csh`。如果 west 和 south 第一次就与模板一致，则不重复计算。终端会显示 `Template bounds`、`First generated bounds`、是否触发 `[RETRY]`，以及重跑后的 `Regenerated bounds`。
+
+重跑后先确认生成网格完整覆盖模板，再使用 `gmt grdsample -R<模板网格> -nn` 进行最近邻重采样，使陆地掩膜的范围、间隔、行列数和注册方式与 `phasefilt.grd` 完全一致。输出：
 
 ```text
 merge/landmask_ra.grd
 merge/landmask_ra.pdf
 ```
 
-PDF 中灰色表示海洋、背景或NaN，红色表示陆地。正式运行会替换旧的陆地掩膜结果并清理 `landmask.grd`、XYZ和重采样临时文件。
+PDF 中灰色表示海洋、背景或NaN，红色表示陆地。正式运行会替换旧的陆地掩膜结果，并清理第一次生成、边界重跑和最终重采样产生的临时文件。
 
 ## Run 3.10：预览 SNAPHU 输入并并行解缠
 

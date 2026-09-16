@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run 6.2: resample and mask GNSS east/north grids to the InSAR velocity grid.
 # Modified by Xin Wang, USTC, Hefei, China
-# Last updated: August 23, 2026
+# Last updated: September 15, 2026
 
 set -euo pipefail
 export LC_ALL=C LANG=C LANGUAGE=C
@@ -33,7 +33,8 @@ Outputs:
   GNSS2LOS_correction/GNSS_N.pdf
   GNSS2LOS_correction/run6.2_complete
 
-The finite-data footprint of vel_ll.grd is used as the InSAR mask.
+The output geometry is forced to the exact vel_ll.grd region, dimensions and
+registration. The finite-data footprint of vel_ll.grd is used as the mask.
 USAGE
 }
 
@@ -66,11 +67,13 @@ for grid in "$E_SOURCE" "$N_SOURCE" "$INSAR_GRID"; do
     gmt grdinfo "$grid" -C >/dev/null || die "GMT cannot read: $grid"
 done
 
-INC_OPT="$(gmt grdinfo "$INSAR_GRID" -I | awk 'NR==1{print $1}')"
-[[ "$INC_OPT" == -I* ]] || die "failed to read grid increment from $INSAR_GRID"
-
 read -r _ XMIN XMAX YMIN YMAX _ _ XINC YINC NX NY REGISTRATION _ \
     <<< "$(gmt grdinfo "$INSAR_GRID" -C | awk 'NR==1{print}')"
+[[ "$NX" =~ ^[1-9][0-9]*$ && "$NY" =~ ^[1-9][0-9]*$ ]] ||
+    die "failed to read template dimensions from $INSAR_GRID"
+[[ "$REGISTRATION" == "0" || "$REGISTRATION" == "1" ]] ||
+    die "invalid template registration: $REGISTRATION"
+NODE_INC="${NX}+n/${NY}+n"
 
 echo "========================================"
 echo "Run 6.2: resample GNSS to the InSAR grid"
@@ -82,6 +85,7 @@ echo "InSAR template    : $INSAR_GRID"
 echo "Template region   : $XMIN / $XMAX / $YMIN / $YMAX"
 echo "Template increment: $XINC / $YINC"
 echo "Template size     : $NX x $NY"
+echo "GMT node-count -I : $NODE_INC"
 echo "Registration      : $REGISTRATION (0=gridline, 1=pixel)"
 echo "Output directory  : $OUT_DIR"
 echo "========================================"
@@ -100,14 +104,28 @@ mkdir "$TMP_DIR"
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT INT TERM
 
-REG_OPT=""
-[[ "$REGISTRATION" == "1" ]] && REG_OPT="-r"
+REG_OPT=()
+[[ "$REGISTRATION" == "1" ]] && REG_OPT=(-r)
 
 echo "[STEP 1] Resample east and north GNSS grids to the vel_ll.grd geometry"
-gmt grdsample "$E_SOURCE" -R"${XMIN}/${XMAX}/${YMIN}/${YMAX}" "$INC_OPT" $REG_OPT \
+echo "Target geometry: -R${XMIN}/${XMAX}/${YMIN}/${YMAX} -I${NODE_INC} ${REG_OPT[*]:-} -fg"
+gmt grdsample "$E_SOURCE" \
+    -R"${XMIN}/${XMAX}/${YMIN}/${YMAX}" \
+    -I"${NODE_INC}" "${REG_OPT[@]}" -fg \
     -G"$TMP_DIR/GNSS_E_resampled.grd"
-gmt grdsample "$N_SOURCE" -R"${XMIN}/${XMAX}/${YMIN}/${YMAX}" "$INC_OPT" $REG_OPT \
+gmt grdsample "$N_SOURCE" \
+    -R"${XMIN}/${XMAX}/${YMIN}/${YMAX}" \
+    -I"${NODE_INC}" "${REG_OPT[@]}" -fg \
     -G"$TMP_DIR/GNSS_N_resampled.grd"
+
+for component in E N; do
+    RESAMPLED="$TMP_DIR/GNSS_${component}_resampled.grd"
+    read -r _ RXMIN RXMAX RYMIN RYMAX _ _ RXINC RYINC RNX RNY RREG _ \
+        <<< "$(gmt grdinfo "$RESAMPLED" -C | awk 'NR==1{print}')"
+    echo "GNSS_${component} resampled: ${RNX} x ${RNY}, registration=${RREG}, increment=${RXINC}/${RYINC}"
+    [[ "$RNX" == "$NX" && "$RNY" == "$NY" && "$RREG" == "$REGISTRATION" ]] ||
+        die "GNSS_${component} resampling did not reproduce the template dimensions/registration"
+done
 
 echo "[STEP 2] Apply the finite-data footprint of vel_ll.grd"
 gmt grdmath "$INSAR_GRID" ISFINITE 0 NAN = "$TMP_DIR/insar_valid_mask.grd"
