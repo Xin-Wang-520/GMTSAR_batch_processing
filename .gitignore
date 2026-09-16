@@ -1,0 +1,8 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pyxbld/
+gmt.history
+
+# Local processing inputs and generated products are not source code.
+GMTSAR-lt1-batch-processing/data/
