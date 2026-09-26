@@ -2,6 +2,8 @@
 set -euo pipefail
 export LC_ALL=C LANG=C
 # Modified by Xin Wang, USTC, Hefei, 2026-08-10.
+# Contact: xinw11@mail.ustc.edu.cn
+# Citation: Xin Wang et al. (2026), Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry, Earth and Planetary Science Letters, 686, 120070.
 
 usage() {
 cat <<'USAGE'

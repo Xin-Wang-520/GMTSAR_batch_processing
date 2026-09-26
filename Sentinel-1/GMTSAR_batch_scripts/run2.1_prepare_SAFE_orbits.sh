@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Modified by Xin Wang, USTC, Hefei, China
-# Last updated: September 14, 2026
+# Contact: xinw11@mail.ustc.edu.cn
+# Citation: Xin Wang et al. (2026), Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry, Earth and Planetary Science Letters, 686, 120070.
+# Last updated: September 24, 2026
 
 set -euo pipefail
 
@@ -17,7 +19,7 @@ usage() {
     cat <<'EOF'
 用法：
   ./run2.1_prepare_SAFE_orbits.sh [选项]       # 只检查和预览
-  ./run2.1_prepare_SAFE_orbits.sh 1 [选项]     # 正式生成清单并下载轨道
+  ./run2.1_prepare_SAFE_orbits.sh 1 [选项]     # 后台生成清单并下载轨道
 
 在 InSAR_processing/Descending/T*/、InSAR_processing/Ascending/T*/ 或
 InSAR_processing/T*/ 中运行：创建 organized/、生成 SAFE_filelist，并调用
@@ -29,11 +31,14 @@ download_sentinel_orbits_linux_new.csh 下载轨道文件。
   --direction DIR      Ascending 或 Descending；路径中没有方向时可明确指定
   --organized-dir DIR  输出目录（默认：organized）
   --downloader FILE    轨道下载 csh 脚本或 PATH 中的命令
+  --foreground         正式模式在前台运行（用于排错）
   -h, --help           显示帮助
 EOF
 }
 
+ORIGINAL_ARGS=("$@")
 RUN_FORMAL=0
+RUN_FOREGROUND=0
 ORBIT_MODE=1
 SOURCE_SAFE=""
 DIRECTION_OPTION=""
@@ -72,6 +77,10 @@ while [[ "$#" -gt 0 ]]; do
             [[ "$#" -ge 2 ]] || die "--downloader requires a file or command"
             DOWNLOADER="$2"
             shift 2
+            ;;
+        --foreground)
+            RUN_FOREGROUND=1
+            shift
             ;;
         -h|--help)
             usage
@@ -206,6 +215,24 @@ if (( RUN_FORMAL == 0 )); then
     printf '  ./run2.1_prepare_SAFE_orbits.sh 1\n'
     printf '[OPTION] Formal RESORB run:\n'
     printf '  ./run2.1_prepare_SAFE_orbits.sh 1 --mode 2\n'
+    exit 0
+fi
+
+# Formal mode is detached by default. The child receives an environment flag
+# so that it runs the processing body instead of spawning itself again.
+if (( RUN_FOREGROUND == 0 )) && [[ "${RUN21_BACKGROUND_CHILD:-0}" != "1" ]]; then
+    SCRIPT_PATH="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/$(basename -- "${BASH_SOURCE[0]}")"
+    BACKGROUND_LOG="${WORK_DIR}/run2.1_prepare_SAFE_orbits.nohup.log"
+    nohup env RUN21_BACKGROUND_CHILD=1 \
+        "${SCRIPT_PATH}" "${ORIGINAL_ARGS[@]}" \
+        </dev/null >"${BACKGROUND_LOG}" 2>&1 &
+    BACKGROUND_PID=$!
+    printf '[BACKGROUND] Run 2.1 started successfully.\n'
+    printf 'PID            : %d\n' "${BACKGROUND_PID}"
+    printf 'Wrapper log    : %s\n' "${BACKGROUND_LOG}"
+    printf 'Orbit log      : %s\n' "${ORBIT_LOG}"
+    printf '[MONITOR] tail -f %q\n' "${ORBIT_LOG}"
+    printf '[NOTE] Ctrl+C in this terminal will not stop the background task.\n'
     exit 0
 fi
 

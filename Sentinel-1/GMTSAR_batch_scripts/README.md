@@ -4,9 +4,11 @@
 
 # Sentinel-1 GMTSAR SBAS Batch Processing Workflow
 
-This directory provides a reusable batch workflow for Sentinel-1 TOPS processing with GMTSAR. It covers ASF download validation, SAFE extraction and cleanup, frame organization, DEM preparation, preprocessing, interferogram generation, IW1/IW2/IW3 merging, unwrapping, SBAS inversion, seasonal-signal removal and GNSS referencing.
+This directory provides a reusable batch workflow for Sentinel-1 TOPS processing with GMTSAR. It covers ASF download validation, SAFE extraction and cleanup, frame organization, DEM preparation, preprocessing, interferogram generation, IW1/IW2/IW3 merging, unwrapping, SBAS inversion, seasonal-signal removal, GNSS referencing and guarded post-processing cleanup.
 
 Author: Xin Wang, University of Science and Technology of China (USTC), Hefei, China
+
+Contact: [xinw11@mail.ustc.edu.cn](mailto:xinw11@mail.ustc.edu.cn)
 
 ## English quick navigation
 
@@ -14,7 +16,16 @@ Author: Xin Wang, University of Science and Technology of China (USTC), Hefei, C
 - [Processing stages](#english-processing-stages)
 - [Recommended commands](#english-recommended-commands)
 - [Parallel processing and restart rules](#english-parallel-processing-and-restart-rules)
+- [Citation](#english-citation)
 - [Open the complete Chinese guide](#中文说明)
+
+<a id="english-citation"></a>
+
+## Citation
+
+If this workflow or its scripts contribute to your research, please cite:
+
+Xin Wang et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070.
 
 <a id="english-directory-layout"></a>
 
@@ -57,6 +68,7 @@ The GMTSAR directory reads the cleaned SAFE products but never writes processing
 | Run 1.2 | Preview/formally extract ZIP files and validate SAFE structure | `T*_SAFE/*.SAFE`, `failed_zip.txt` |
 | Run 1.3 | Remove VH, keep VV and safely remove verified ZIP files | VV-only SAFE stack |
 | Run 2.1 | Build `SAFE_filelist` and download orbit files | SAFE list and EOF files |
+| Run 2.1.2 | Robustly complete failed orbit downloads with wget/curl fallback | cached monthly indexes, EOF files and a resumable failure list |
 | Run 2.2 | Preview and organize TOPS frames by date | organized frame directories |
 | Run 2.3 | Derive DEM bounds from frame XML files | `topo/dem.grd` and DEM PDF |
 | Run 2.4 | Create F1/F2/F3 and link IW, EOF and DEM inputs | `F1/raw`, `F2/raw`, `F3/raw` |
@@ -66,6 +78,7 @@ The GMTSAR directory reads the cleaned SAFE products but never writes processing
 | Run 3.3 | Preview and confirm the interferogram network | `intf.in`, config and baseline PDF |
 | Run 3.4 | Convert DEM to master-image radar coordinates | `topo_ra.grd` and `trans.dat` |
 | Run 3.5 | Generate and validate interferograms | `F*/intf_all/<pair>/` |
+| Run 3.5.2 | Retry only failed Run 3.5 pairs without touching successful pairs | repaired `corr.grd`, `mask.grd` and `phasefilt.grd` |
 | Run 3.6 | Preview seams and merge F1/F2/F3 | `merge/<pair>/` |
 | Run 3.7–3.9 | Plot merged products and build coherence/land masks | QC plots and mask grids |
 | Run 3.10 | Preview SNAPHU inputs and perform resumable unwrapping | `unwrap.grd`, `unwrap.pdf` |
@@ -73,6 +86,8 @@ The GMTSAR directory reads the cleaned SAFE products but never writes processing
 | Run 4.1–4.4 | Prepare, run and geocode SBAS | displacement/velocity grids, PDF and KML |
 | Run 5.1–5.4 | Remove seasonal components and rebuild velocity | deseasoned displacement/velocity |
 | Run 6.1–6.9 | Grid GNSS, project to LOS and reference InSAR | GNSS-corrected displacement/velocity |
+| Run 7.1 | Preview and clean reproducible F1/F2/F3 and merge intermediates | reclaimed storage with core products preserved |
+| Run 7.2 | Preview and clean reproducible SBAS/GNSS intermediates | reclaimed storage with all final time series preserved |
 
 <a id="english-recommended-commands"></a>
 
@@ -91,6 +106,10 @@ Run every script without arguments first when it provides a check or command-gui
 # Track-processing directory
 ./run2.1_prepare_SAFE_orbits.sh
 ./run2.1_prepare_SAFE_orbits.sh 1
+# Use this robust fallback when the ESA connection is unstable
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh 1
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh 2
 ./run2.2_organize_frames.sh 1
 ./run2.2_organize_frames.sh 2
 ./run2.3_prepare_topo_DEM.py 1
@@ -104,11 +123,54 @@ Run every script without arguments first when it provides a check or command-gui
 ./run3.3_make_intf_config_F123.sh 1 60 150
 ./run3.3_make_intf_config_F123.sh 2
 ./run3.5_intf_tops_parallel_F123.sh 5
+# Only if Run 3.5 reports failed pairs:
+./run3.5.2_retry_failed_pairs_F123.sh 1
+./run3.5.2_retry_failed_pairs_F123.sh 2
 ./run3.8_stack_coherence_mask_parallel.sh 0.075 50 5
 ./run3.9_make_landmask_ra.sh 1
 ./run3.10_unwrap_merge_parallel.sh 1 0.0001
 ./run3.10_unwrap_merge_parallel.sh 2 5 0.0001
+
+# Post-processing cleanup: always preview first
+./run7.1_cleanup_F1F2F3_merge_intermediate_files.sh
+./run7.1_cleanup_F1F2F3_merge_intermediate_files.sh 1
+./run7.2_cleanup_SBAS_GNSS_intermediate_files.sh
+./run7.2_cleanup_SBAS_GNSS_intermediate_files.sh 1
 ```
+
+### Run 2.1.2: robust orbit-download recovery
+
+Run 2.1.2 is a standalone alternative/recovery downloader for servers where
+the ESA orbit site intermittently times out during Run 2.1. It builds the
+same `organized/SAFE_filelist`, skips every existing non-empty `.EOF`, and
+tries `wget` for 30 seconds followed by `curl` for 30 seconds. Successful
+monthly directory pages such as `tmp_orbit_POEORB_S1A_201701.html` are cached
+for seven days and reused; a stale valid cache is retained as a fallback when
+the network refresh fails.
+
+Positional mode `1` scans all acquisition dates once. Positional mode `2`
+reads `organized/run2.1.2_failed_orbit_dates.tsv` and automatically retries
+only the remaining failed dates for up to five passes, waiting five seconds
+between passes. It stops immediately when the failure list becomes empty.
+The positional run mode is separate from `--mode`: `--mode 1` selects POEORB
+(default), while `--mode 2` selects RESORB.
+
+```bash
+# Preview only
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh
+
+# One complete POEORB scan (runs in the background)
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh 1
+
+# Up to five automatic passes over only the remaining failures
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh 2
+
+# Complete scan using RESORB instead
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh 1 --mode 2
+```
+
+Monitor `organized/run2.1.2_wget_curl_orbit_download.log`. The retry list is
+rewritten after every pass, so successful dates are not downloaded again.
 
 Run 3.9 first calls `landmask.csh` with the complete phase-grid region and
 inspects the generated west and south bounds with `gmt grdinfo -C`. If either
@@ -131,9 +193,18 @@ The complete argument descriptions, server examples, output inventories and trou
 - Preview/check modes do not modify processing products.
 - Resumable scripts validate existing outputs and process only missing or incomplete records.
 - Run 3.2.2 is an exceptional recovery step, not a normal mandatory stage. Use it only when Run 3.2 reports `Orbit file missing`, while an EOF with the same `V<start>_<end>` validity interval already exists under `F*/raw`.
+- Run 3.2.2 mode 2 is safely repeatable: it rebuilds the pending list and skips every acquisition that already has complete non-empty PRM, LED and SLC files.
+- Run 2.1.2 mode 2 is resumable and automatic: it retries only the current failure list for at most five passes and exits early after all required EOF files are present.
+- Run 3.5.2 is an exceptional pair-level recovery step. It reads the Run 3.5 failure reports, retries only those pairs sequentially, and preserves all previously successful interferogram directories.
 - Preserve `run*.complete`, manifests, inventories and failure reports for later validation.
 - Treat every non-empty failure report as unresolved until its log has been inspected.
 - Do not start a second formal process while an existing PID from the same run is active.
+
+## Runs 7.1–7.2: guarded cleanup
+
+Run 7.1 cleans reproducible files under `F1/F2/F3/intf_all`, validated non-`ALL` raw SLC/PRM/LED files, selected temporary files under completed `merge/<pair>` directories, and the track-root `gmt.history`. It keeps `gauss_400`, all `ALL` SLC/PRM/LED files, core merged grids, DEM-corrected unwrap products, SBAS outputs and GNSS products. The default invocation is preview-only; argument `1` enables deletion. The report includes the track-directory size before and after cleanup, the estimated target size and the actual reclaimed space.
+
+Run 7.2 never touches `F1`, `F2`, `F3` or `merge`. It requires the Run 6.7, 6.8 and 6.9 completion markers and validates epoch counts before cleaning reproducible SBAS/GNSS intermediates. Targets include `raln.grd`, `ralt.grd`, optional `nobs_deseason.grd`, logs/PS/PID/cache files, temporary `.run*` directories, resampled `GNSS_E.grd`/`GNSS_N.grd`, the per-epoch `gnss_LOS_*.grd` model stack and the per-epoch `diff_*_smooth80km_full.grd` correction stack. Original SBAS displacement, deseasoned displacement, final GNSS-corrected displacement, velocity grids, validation products, PDFs, KMLs and completion markers are preserved. The report shows SBAS, GNSS and combined sizes before and after cleanup.
 
 ---
 
@@ -146,7 +217,17 @@ The complete argument descriptions, server examples, output inventories and trou
 
 本说明书用于持续整理 Sentinel-1 数据从 ASF 下载、SAFE 解压与清理、GMTSAR 分帧处理、拼接、干涉、解缠到 SBAS 时序反演的自动化脚本。所有脚本按 `run1`、`run2`、`run3`……的顺序逐步定稿，并同步记录输入、输出、运行方式、日志和断点续跑方法。
 
-> 当前状态：Run 1.1～Run 1.3 完成原始数据准备；Run 2.1～Run 2.4 覆盖轨道、分帧、DEM 和输入链接；Run 3.1～Run 3.13 已覆盖预处理、选对、雷达地形、干涉、三子条带拼接、质量预览、并行解缠、DEM误差改正和参考区归零；Run 4.1～Run 4.4 已覆盖 SBAS 输入筛选、表格准备、正式并行反演和速度投影；Run 5.1～Run 5.4 覆盖季节性改正；Run 6.1～Run 6.9 覆盖 GNSS 水平速度插值、LOS 投影、时序验证、长波长 GNSS 参考改正以及最终速度投影。
+作者：Xin Wang，中国科学技术大学，中国合肥
+
+联系邮箱：[xinw11@mail.ustc.edu.cn](mailto:xinw11@mail.ustc.edu.cn)
+
+## 引用
+
+如果本流程或脚本对您的研究有帮助，请引用：
+
+Xin Wang et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070.
+
+> 当前状态：Run 1.1～Run 1.3 完成原始数据准备；Run 2.1～Run 2.4 覆盖轨道、分帧、DEM 和输入链接；Run 3.1～Run 3.13 已覆盖预处理、选对、雷达地形、干涉、三子条带拼接、质量预览、并行解缠、DEM误差改正和参考区归零；Run 4.1～Run 4.4 已覆盖 SBAS 输入筛选、表格准备、正式并行反演和速度投影；Run 5.1～Run 5.4 覆盖季节性改正；Run 6.1～Run 6.9 覆盖 GNSS 水平速度插值、LOS 投影、时序验证、长波长 GNSS 参考改正以及最终速度投影；Run 7.1～Run 7.2 覆盖带预览、完成标记和数据量核验的安全清理。
 
 ## 文档与脚本维护约定
 
@@ -195,6 +276,7 @@ run1.3_remove_VH_keep_VV_delete_zip_S1.sh
 
 切换到 /data2/xinw/InSAR_processing/Descending/T34
 ├── Run 2.1 生成 SAFE_filelist 并下载轨道文件
+├── Run 2.1.2（网络不稳定时）wget/curl 双重下载 → 缓存月份索引 → 最多5轮自动补跑失败日期
 ├── Run 2.2 检查 pins.ll → mode=1 预览 → mode=2 正式重组帧
 ├── Run 2.3 汇总重组帧全部 XML → 计算 DEM 范围 → 在 topo/ 生成 dem.grd
 ├── Run 2.4 建立 F1/F2/F3 → 链接对应 IW、EOF 和 DEM
@@ -204,8 +286,9 @@ run1.3_remove_VH_keep_VV_delete_zip_S1.sh
 ├── Run 3.3 预览并确认 F1 时空基线网络 → 生成 F1/F2/F3 的 intf.in 和配置
 ├── Run 3.4 将 DEM 转换到 F1/F2/F3 主影像雷达坐标
 ├── Run 3.5 并行生成 F1/F2/F3 干涉图并逐对验证
+├── Run 3.5.2（仅失败恢复）读取 Run 3.5 失败清单 → 逐对补跑且保留成功结果
 ├── Run 3.6 预览拼接缝 → 正式拼接全部 F1/F2/F3 干涉对
-├── Run 3.7 检查并抽样绘制拼接后的 corr/phasefilt
+├── Run 3.7 检查拼接网格 → 删除不完整 merge 日期对 → 抽样绘制 corr/phasefilt
 ├── Run 3.8 叠加全部 corr → 生成 mean_corr.grd 和 mask_def.grd
 ├── Run 3.9 检查下边界并在必要时以 -4 重跑 → 生成与相位网格一致的 landmask_ra.grd
 ├── Run 3.10 预览组合掩膜输入 → 可续跑并行 SNAPHU 解缠
@@ -228,7 +311,9 @@ run1.3_remove_VH_keep_VV_delete_zip_S1.sh
 ├── Run 6.6 重新拟合 GNSS LOS 时序并验证日期与速度
 ├── Run 6.7 用 GNSS LOS 时序改正去季节 InSAR 位移的长波长差异
 ├── Run 6.8 拟合 GNSS 改正后速度及被去除的长波长改正速度
-└── Run 6.9 将两套速度投影到经纬度，分别绘图并输出最终速度 KML
+├── Run 6.9 将两套速度投影到经纬度，分别绘图并输出最终速度 KML
+├── Run 7.1 预览并清理 F1/F2/F3 和 merge 中可再生的中间文件
+└── Run 7.2 预览并清理 SBAS/GNSS 可再生中间文件，保留全部最终时序
 ```
 
 ### Run 1.1：下载 Sentinel-1 数据
@@ -1985,6 +2070,21 @@ cd /data2/xinw/InSAR_processing/Descending/T34
 ./run2.1_prepare_SAFE_orbits.sh 1
 ```
 
+正式模式默认自动转入后台，并立即返回后台 PID。终端中的 `Ctrl+C` 不会停止已经启动的后台任务。包装日志和轨道下载日志分别为：
+
+```text
+run2.1_prepare_SAFE_orbits.nohup.log
+organized/run2.1_orbit_download.log
+```
+
+实时查看轨道下载进度：
+
+```bash
+tail -f organized/run2.1_orbit_download.log
+```
+
+如果确实需要在当前终端前台执行，可加 `--foreground`。
+
 下载 RESORB 快速轨道：
 
 ```bash
@@ -2004,6 +2104,7 @@ cd /data2/xinw/InSAR_processing/Descending/T34
 T34/
 ├── run2.1_prepare_SAFE_orbits.sh
 ├── run2.1_prepare_SAFE_orbits.log
+├── run2.1_prepare_SAFE_orbits.nohup.log
 └── organized/
     ├── SAFE_filelist
     ├── run2.1_orbit_download.log
@@ -2019,6 +2120,74 @@ grep '\[ERROR\]' organized/run2.1_orbit_download.log
 ```
 
 脚本只有在下载程序退出状态为 0、日志中没有 `[ERROR]` 且至少存在一个 `.EOF` 时才返回成功。单个场景轨道匹配失败时，原 csh 程序虽然继续处理其他场景，但 Run 2.1 最终仍返回非零状态并保留日志。
+
+### Run 2.1.2：wget/curl 稳健轨道下载与自动补跑
+
+`run2.1.2_prepare_SAFE_orbits_wget_curl.sh` 是独立的轨道下载方案，适用于 ESA
+`step.esa.int` 在服务器上经常出现 SSL、响应头或连接超时的情况。它与 Run 2.1
+生成相同的 `organized/SAFE_filelist`，已有且非空的 `.EOF` 会直接跳过，不会重复下载。
+
+下载策略为：
+
+- 先用 `wget` 尝试30秒；
+- `wget` 失败或 ZIP 完整性检查失败后，再用 `curl` 尝试30秒；
+- `tmp_orbit_POEORB_S1A_201701.html` 这类月份轨道索引在 `organized/` 保留7天；
+- 新索引刷新失败时，只要旧缓存有效就继续使用；
+- 未完成的 `.EOF.zip.part` 会被清理，已完成的 `.EOF` 始终保留。
+
+无参数只预览：
+
+```bash
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh
+```
+
+位置参数 `1` 对全部日期执行一轮正式检查与下载，并默认转入后台：
+
+```bash
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh 1
+```
+
+位置参数 `2` 读取上一轮的失败清单，只补跑剩余失败日期：
+
+```bash
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh 2
+```
+
+模式2最多自动执行5轮，每轮之间等待5秒。每一轮都重写失败清单，只把当前仍然失败的日期交给下一轮；如果提前全部成功，脚本会立即结束。失败清单已经为空时，再次执行模式2也会直接返回完成。
+
+两类“模式”不要混淆：
+
+- 脚本后的 `1`/`2`：`1`=全部日期，`2`=自动补跑失败日期；
+- `--mode 1|2`：`--mode 1`=POEORB 精密轨道（默认），`--mode 2`=RESORB 快速轨道。
+
+例如，全量下载快速轨道：
+
+```bash
+./run2.1.2_prepare_SAFE_orbits_wget_curl.sh 1 --mode 2
+```
+
+主要输出与监控文件：
+
+```text
+organized/SAFE_filelist
+organized/*.EOF
+organized/tmp_orbit_POEORB_*.html
+organized/run2.1.2_failed_orbit_dates.tsv
+organized/run2.1.2_wget_curl_orbit_download.log
+run2.1.2_prepare_SAFE_orbits_wget_curl.nohup.log
+```
+
+监控后台下载：
+
+```bash
+tail -f organized/run2.1.2_wget_curl_orbit_download.log
+```
+
+查看当前剩余失败数量：
+
+```bash
+wc -l organized/run2.1.2_failed_orbit_dates.tsv
+```
 
 ---
 
@@ -2386,7 +2555,9 @@ chmod +x run3.1_prep_data_F123.sh
 - 所有符号链接都能解析到真实文件；
 - `prep_data_linux.csh` 位于 `PATH`。
 
-通过检查后，脚本清理上一次准备阶段生成的 `data.in`、备份、列表和日志，但不删除 XML、TIFF、EOF、DEM 或其他处理文件。随后运行：
+通过检查后，脚本清理上一次准备阶段生成的 `data.in`、备份、列表和日志，但不删除 XML、TIFF、EOF、DEM 或其他处理文件。脚本先直接读取本地 `F*/raw/*.EOF` 文件名构建 `orbits.list`，然后对每个 XML 影像日期检查是否存在同卫星、且有效期覆盖该日期的轨道。这样不会依赖网页重新生成一份可能不完整的轨道清单。
+
+若任一日期找不到本地匹配轨道，脚本写出 `F*/raw/run3.1_missing_orbits.tsv` 并停止；全部匹配后才运行：
 
 ```bash
 prep_data_linux.csh > prep_data.log 2>&1
@@ -2416,6 +2587,8 @@ F1/raw/
 ├── data.in
 ├── data.in.orig
 ├── data.in.before_middle_first
+├── orbits.list
+├── run3.1_missing_orbits.tsv  # 仅缺轨道时包含记录
 └── prep_data.log
 
 F2/raw/  # 同样四类输出
@@ -2643,6 +2816,8 @@ S1A_OPER_AUX_POEORB_OPOD_20251027T070555_V20251006T225942_20251008T005942.EOF
 
 默认 `5` 线程时最大活动任务数约为 `3 × 5 = 15`。已经具有完整 PRM、LED、SLC 的日期不会重新处理。
 
+模式2可以安全地重复执行。每次都会重新检查完整 `data.in`，只把 PRM、LED 或 SLC 缺失/为空的日期放入新的待处理清单；已经补成功的日期自动跳过。如果三个 frame 都没有待补日期，脚本直接报告完成，不会再次运行全部预处理。
+
 主要记录文件：
 
 ```text
@@ -2709,6 +2884,14 @@ F1/run3.3_preview.info
 ```
 
 `baseline.pdf` 中的点表示影像，连线表示已选干涉对。先查看该图；如果网络不合适，用新阈值重新运行模式1。
+
+横轴使用整年刻度，纵轴为垂直基线，图内不绘制水平网格线。标题由更新后的 `select_pairs_new.csh` 生成，格式为：
+
+```text
+SBAS network | Time <= 60 d | Bperp <= 150 m | Pairs = N | Master = YYYYMMDD
+```
+
+其中主影像从刚生成的 `F1/batch_tops.config` 中读取 `master_image = S1_YYYYMMDD_ALL_F1`，干涉对数量从 `F1/intf.in` 统计。服务器上的 `/home/xinw/bin/own/select_pairs_new.csh` 也必须同步为当前版本，否则标题和年刻度仍会沿用旧样式。
 
 模式1同时生成 `F1/batch_tops.config`。`master_image` 的日期来自 `F1/raw/data.in` 第一行，也就是 Run3.1 调整到首行的统一主影像：
 
@@ -2897,6 +3080,41 @@ F3/itp.log       F3/intf_all/<日期对>/
 
 ---
 
+## Run 3.5.2：只补跑 Run 3.5 失败干涉对
+
+只有 Run 3.5 报告 F1、F2 或 F3 存在失败干涉对时才使用本脚本；Run 3.5 全部成功时不需要运行。
+
+无参数显示说明。模式1读取三个 frame 的 `run3.5_failed_pairs.tsv`，检查配置、原始 PRM/LED/SLC、预期输出目录和异常目录，只预览补跑计划：
+
+```bash
+./run3.5.2_retry_failed_pairs_F123.sh 1
+```
+
+确认后运行模式2：
+
+```bash
+./run3.5.2_retry_failed_pairs_F123.sh 2
+```
+
+模式2按失败清单逐对顺序补跑，避免单对异常再次给服务器造成过高负载。每次只删除该失败干涉对的预期输出目录，以及由同一次失败产生的 `_YYYYDDD` 这类畸形目录；不会删除或重算其他已经成功的 `F*/intf_all/<日期对>/`。每对完成后必须同时通过以下检查：
+
+```text
+corr.grd
+mask.grd
+phasefilt.grd
+```
+
+原失败清单会先备份，仍失败的记录写入新的 `run3.5.2_failed_pairs.tsv`，详细过程保存在对应日志中。长时间运行可使用：
+
+```bash
+nohup ./run3.5.2_retry_failed_pairs_F123.sh 2 \
+  > run3.5.2_retry_failed_pairs.nohup.log 2>&1 &
+```
+
+脚本最后显示 `[SUCCESS]` 后再继续 Run 3.6。
+
+---
+
 ## Run 3.6：清理临时文件并拼接 F1/F2/F3
 
 Run3.5 的 F1、F2、F3 全部成功后，在轨道根目录先执行无参数检查：
@@ -3044,7 +3262,13 @@ merge/run3.7_check_complete
 merge/run3.7_missing_grids.tsv
 ```
 
-脚本不会自动删除干涉对或网格。修复缺失结果后必须重新运行模式1。
+模式1会直接删除这些不完整的 `merge/<日期对>/` 目录，并把实际删除清单写入：
+
+```text
+merge/run3.7_deleted_incomplete_pairs.tsv
+```
+
+该删除只作用于拼接后的不完整 `merge` 日期对，不进入也不修改 `F1/F2/F3/intf_all`。删除后脚本重新统计剩余目录；全部剩余干涉对均具有非空 `corr.grd` 和 `phasefilt.grd` 时，才生成 `merge/run3.7_check_complete`。因此后续 Run 4.1 会按实际保留的完整 `merge` 干涉对重新更新 SBAS 网络。
 
 推荐的模式2按第一景日期的年份分组，并选取每年实际干涉对列表约25%和75%位置的记录进行绘图：
 
@@ -3910,6 +4134,13 @@ GNSS2LOS_correction/run6.2_complete
 ./run6.3_project_GNSS_to_LOS.py 1 descending
 ~~~
 
+默认绘图范围根据正式 LOS 结果的实际最小值和最大值自动取绝对值较大者，并生成以0为中心的对称色标。也可在方向后给出固定正值，例如：
+
+~~~bash
+./run6.3_project_GNSS_to_LOS.py 1 descending 5   # -5～5 mm/yr
+./run6.3_project_GNSS_to_LOS.py 1 descending 10  # -10～10 mm/yr
+~~~
+
 如果有更精确的轨道方位角或入射角，可以覆盖对应方向的默认值：
 
 ~~~bash
@@ -3931,7 +4162,7 @@ GNSS2LOS_correction/GNSS_to_LOS.pdf
 GNSS2LOS_correction/run6.3_complete
 ~~~
 
-PDF 使用兼容性更好的 GMT classic 流程 `grdimage → psscale → psconvert` 绘制，不依赖 `gmt begin/end` 现代会话；固定采用 jet 色标和 `-5/5/1 mm/yr` 范围。NaN 区域显示为灰色，标题位于上方，水平色标位于图件下方，与 Run 5.4、Run 6.2 的布局保持一致。Run 6.3 已合并原来的 LOS 计算和单独绘图脚本；Python 环境安装 `netCDF4` 或 `xarray` 中任意一个即可读取和写出 GMT 网格，不再依赖 Matplotlib 绘图。
+PDF 使用兼容性更好的 GMT classic 流程 `grdimage → psscale → psconvert` 绘制，不依赖 `gmt begin/end` 现代会话；采用 GMT `jet` 对称色标，默认范围来自实际 LOS 最大绝对值，也可由位置参数固定为5、10等正值。NaN 区域显示为灰色，标题位于上方，水平色标位于图件下方，与 Run 5.4、Run 6.2 的布局保持一致。Run 6.3 已合并原来的 LOS 计算和单独绘图脚本；Python 环境安装 `netCDF4` 或 `xarray` 中任意一个即可读取和写出 GMT 网格，不再依赖 Matplotlib 绘图。
 
 ## Run 6.4：投影 GNSS LOS 速度到雷达坐标
 
@@ -4051,6 +4282,8 @@ GNSS2LOS_correction/run6.7_complete
 
 脚本支持断点续跑：只有当两项输出均有效且比对应 InSAR/GNSS 输入更新时才跳过该期。
 
+粗网格重新采样到像元注册的 InSAR 模板时，GMT 可能因边界取整少覆盖最外侧一列。脚本发现几何不一致后会显示 `[ALIGN]`，用 InSAR 模板的精确范围恢复输出，并对没有被粗网格覆盖的最外侧单元使用零改正。此时出现 `grdcut ... extended nodes not set to NaN` 属于边缘扩展提示；只要该期随后显示 `[OK]`，且最终范围、增量、行列数和注册方式验证均通过，就不是改正失败。
+
 ## Run 6.8：拟合 GNSS 改正后的速度
 
 无参数只核对两套 Run 6.7 时序数量和日期：
@@ -4097,6 +4330,12 @@ GNSS2LOS_correction/run6.8_complete
 ./run6.9_geocode_GNSS_corrected_velocity.sh 1 600
 ~~~
 
+第三个参数可手动指定两幅 PDF 和最终 KML 使用的对称色标最大值。默认是5；例如400 m滤波并使用 `-10～10 mm/yr`：
+
+~~~bash
+./run6.9_geocode_GNSS_corrected_velocity.sh 1 400 10
+~~~
+
 输出为：
 
 ~~~text
@@ -4109,4 +4348,97 @@ GNSS2LOS_correction/GNSS_corrected_displacement/vel_gnssref_5km_80km_ll*.kml
 GNSS2LOS_correction/run6.9_complete
 ~~~
 
-两套速度分别保存为独立 PDF，均使用 `-5～5 mm/yr` 的 GMT `jet` 色标。KML 只对应 GNSS 改正后的最终 InSAR 速度，可直接加载到 Google Earth。
+两套速度分别保存为独立 PDF，使用 GMT `jet` 对称色标；默认 `-5～5 mm/yr`，也可用第三个参数修改。KML 只对应 GNSS 改正后的最终 InSAR 速度，不为长波长差值速度生成 KML，可直接加载到 Google Earth。
+
+## Run 7.1：清理 F1/F2/F3 和 merge 可再生中间文件
+
+脚本必须放在并运行于具体的 `T*` 轨道根目录。无参数只扫描和统计，不创建、修改或删除任何文件：
+
+~~~bash
+./run7.1_cleanup_F1F2F3_merge_intermediate_files.sh
+~~~
+
+确认预览汇总后，参数 `1` 才执行正式删除：
+
+~~~bash
+./run7.1_cleanup_F1F2F3_merge_intermediate_files.sh 1
+~~~
+
+默认使用简洁输出：每类删除规则只显示一次，扫描过程仅显示少量 `[SCAN]` 行，不逐个打印数万个文件路径。如需完整清单，可以显式启用：
+
+~~~bash
+VERBOSE=1 ./run7.1_cleanup_F1F2F3_merge_intermediate_files.sh
+~~~
+
+Run 7.1 清理以下内容：
+
+- `F1/F2/F3/intf_all/20*_20*/` 中的振幅、显示、滤波缓存、CPT、PS/PDF 和 GMT 历史等可再生文件。
+- 只有同日期 `S1_<date>_ALL_<frame>.SLC/.PRM/.LED` 三者均非空时，才删除对应的非 `ALL` SLC/PRM/LED。
+- 只有干涉对的 `unwrap_dem_correct_pin_up.grd` 非空时，才清理该 `merge/20*_20*/` 中的日志、patch、临时清单和中间解缠文件。
+- 轨道根目录的 `gmt.history`。
+
+脚本始终保留 `gauss_400`、全部 `ALL` SLC/PRM/LED、核心拼接网格、最终 DEM 改正解缠结果、`trans.dat`、DEM、SBAS、去季节和 GNSS 结果。正式模式还会检查已知 PID 文件，发现仍在运行的处理进程时拒绝删除。
+
+汇总同时给出各类别文件数和预计释放量，并显示整个轨道目录清理前、清理后大小及实际释放的 MiB/GiB。
+
+## Run 7.2：清理 SBAS 和 GNSS 可再生中间文件
+
+Run 7.2 完全不访问或删除 `F1/`、`F2/`、`F3/` 和 `merge/`。无参数执行安全预览：
+
+~~~bash
+./run7.2_cleanup_SBAS_GNSS_intermediate_files.sh
+~~~
+
+确认期数检查、删除类别和预计释放量后，参数 `1` 执行正式清理：
+
+~~~bash
+./run7.2_cleanup_SBAS_GNSS_intermediate_files.sh 1
+~~~
+
+默认只显示删除类型、扫描区域和最终汇总。如需逐项路径：
+
+~~~bash
+VERBOSE=1 ./run7.2_cleanup_SBAS_GNSS_intermediate_files.sh
+~~~
+
+正式清理前强制要求以下完成标记非空：
+
+~~~text
+GNSS2LOS_correction/run6.7_complete
+GNSS2LOS_correction/run6.8_complete
+GNSS2LOS_correction/run6.9_complete
+~~~
+
+脚本还会比较 `disp_deseason/disp_*.grd`、`GNSS_LOS_timeseries/gnss_LOS_*.grd`、最终 GNSS 改正位移和逐期长波改正场的期数。最终改正位移必须存在；其余尚未清理的逐期中间栈必须与最终期数相同，否则立即停止。
+
+SBAS 清理目标包括：
+
+~~~text
+sbas_demcorr_pin/raln.grd
+sbas_demcorr_pin/ralt.grd
+sbas_demcorr_pin/nobs_deseason.grd（若存在）
+sbas_demcorr_pin/disp_deseason/nobs_deseason.grd（若存在）
+*.log、*.ps、失效 *.pid、gmt.history、*.pyc
+临时 .run* 目录和 __pycache__/
+~~~
+
+GNSS 清理目标包括：
+
+~~~text
+GNSS2LOS_correction/GNSS_E.grd
+GNSS2LOS_correction/GNSS_N.grd
+GNSS2LOS_correction/GNSS_LOS_timeseries/gnss_LOS_*.grd
+GNSS2LOS_correction/GNSS_corrected_displacement/diff_*_smooth80km_full.grd
+*.log、*.ps、失效 *.pid、gmt.history、*.pyc
+临时 .run* 目录和 __pycache__/
+~~~
+
+Run 7.2 保留下列科研结果：
+
+- 原始 `sbas_demcorr_pin/disp_*.grd` 位移时序。
+- `disp_deseason/disp_*.grd` 去季节位移时序及其速度产品。
+- `GNSS_corrected_displacement/disp_*_gnssref_5km_80km.grd` 最终 GNSS 改正位移。
+- `GNSS_E_HMF.grd`、`GNSS_N_HMF.grd`、`GNSS_to_LOS.grd`、`GNSS_to_LOS_ra.grd`。
+- GNSS 验证结果、最终速度、经纬度网格、PDF、PNG、KML及全部完成标记。
+
+为避免对数 TiB 的 F1/F2/F3/merge 重复执行耗时的目录遍历，Run 7.2 只统计实际目标 `sbas_demcorr_pin/` 和 `GNSS2LOS_correction/`。终端分别显示 SBAS、GNSS 和两者合计的清理前后大小、预计释放量及实际释放的 MiB/GiB。

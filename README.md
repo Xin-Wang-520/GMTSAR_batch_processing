@@ -8,6 +8,8 @@ Reusable GMTSAR batch-processing workflows for Sentinel-1 and LuTan-1 (LT-1), in
 
 Author: Xin Wang, University of Science and Technology of China (USTC), Hefei, China
 
+Contact: [xinw11@mail.ustc.edu.cn](mailto:xinw11@mail.ustc.edu.cn)
+
 > This is a user-developed research workflow. It is not an official GMTSAR distribution. Review every preview, parameter and quality-control product before using the results in scientific analysis.
 
 ## Repository contents
@@ -162,6 +164,10 @@ The repository does not bundle GMTSAR, GMT, Sentinel-1 data or orbit products.
 
 ## Citation and acknowledgement
 
+If this repository or its workflows contribute to your research, please cite:
+
+Xin Wang et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070.
+
 If these scripts contribute to a publication, cite the relevant GMTSAR, GMT, GNU Parallel, SNAPHU, Sentinel-1 and data-provider references required by the software and datasets used in the analysis.
 
 ---
@@ -175,6 +181,8 @@ If these scripts contribute to a publication, cite the relevant GMTSAR, GMT, GNU
 本仓库提供 Sentinel-1 和陆探一号（LT-1）的 GMTSAR 批处理流程，包括干涉、相位解缠、SBAS 时序反演、速度地理编码和点时序提取。
 
 作者：王欣，中国科学技术大学（USTC），合肥
+
+联系邮箱：[xinw11@mail.ustc.edu.cn](mailto:xinw11@mail.ustc.edu.cn)
 
 > 本仓库是用户开发的科研处理流程，不是 GMTSAR 官方发行版。正式科研使用前，请检查每一步的预览结果、参数、日志与质量控制图。
 
@@ -304,5 +312,9 @@ chmod +x LuTan-1/GMTSAR-lt1-batch-processing/run*.py
 - Sentinel-1 原始数据与 GMTSAR 处理结果应分目录保存。
 
 ## 引用
+
+如果本仓库或其中的处理流程对您的研究有帮助，请引用：
+
+Xin Wang et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070.
 
 如果这些脚本用于论文或科研成果，请根据实际使用的软件与数据，引用 GMTSAR、GMT、GNU Parallel、SNAPHU、Sentinel-1 和数据提供机构要求的相关文献。
