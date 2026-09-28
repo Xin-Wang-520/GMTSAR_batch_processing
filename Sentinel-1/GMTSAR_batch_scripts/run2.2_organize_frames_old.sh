@@ -97,45 +97,6 @@ mode2_log_has_critical_errors() {
     grep -Eiq 'Couldn.t open xml|couldn.t open master[.]PRM|Error: Incorrect input|cannot stat .*(new[.]xml|new[.]tiff)|gmtinfo \[ERROR\]|awk:.*syntax error|No space left|Killed|Segmentation fault|Connection timed out|Connection refused|Temporary failure in name resolution|Unable to establish SSL connection|failed: Connection' "$1"
 }
 
-link_local_orbits_for_date() {
-    local date_safe_list="$1"
-    local date_work="$2"
-    local date_value="$3"
-    local iso_date="${date_value:0:4}-${date_value:4:2}-${date_value:6:2}"
-    local valid_start valid_end safe_path mission expected_mission="" orbit_path found
-
-    valid_start="$(date -d "${iso_date} - 1 day" +%Y%m%d)" || return 1
-    valid_end="$(date -d "${iso_date} + 1 day" +%Y%m%d)" || return 1
-    while IFS= read -r safe_path; do
-        [[ -n "${safe_path}" ]] || continue
-        mission="$(basename -- "${safe_path}")"
-        mission="${mission%%_*}"
-        if [[ ! "${mission}" =~ ^S1[ABCD]$ ]]; then
-            printf '[ERROR] Cannot identify Sentinel mission: %s\n' "${safe_path}"
-            return 1
-        fi
-        if [[ -n "${expected_mission}" && "${mission}" != "${expected_mission}" ]]; then
-            printf '[ERROR] Mixed Sentinel missions on %s require separate processing.\n' "${date_value}"
-            return 1
-        fi
-        expected_mission="${mission}"
-    done < "${date_safe_list}"
-
-    found=0
-    while IFS= read -r orbit_path; do
-        ln -s -- "${orbit_path}" "${date_work}/$(basename -- "${orbit_path}")" || return 1
-        found=$((found + 1))
-    done < <(find -L "${ORGANIZED_ABS}" -mindepth 1 -maxdepth 1 -type f -size +0c \
-        -name "${expected_mission}_OPER_AUX_POEORB_*_V${valid_start}T*_${valid_end}T*.EOF" -print | sort)
-    if (( found == 0 )); then
-        printf '[ERROR] Missing local POEORB for %s %s (validity %s to %s). Run 2.1.2 first.\n' \
-            "${expected_mission}" "${date_value}" "${valid_start}" "${valid_end}"
-        return 1
-    fi
-    printf '[ORBIT LOCAL] %s %s: linked %d matching POEORB file(s)\n' \
-        "${expected_mission}" "${date_value}" "${found}"
-}
-
 prepare_mode2_safe_list() {
     local refresh_mode="$1"
     local source_good=""
@@ -278,20 +239,17 @@ run_mode1_parallel() {
             return 0
         fi
 
-        if ! link_local_orbits_for_date "${preview_safe_list}" "${preview_work}" "${preview_date}" \
-            > "${preview_log}" 2>&1; then
-            printf 'local_orbit_check_failed\n' > "${mode1_work_root}/${preview_date}.failed"
-            rm -rf -- "${preview_work}"
-            return 0
-        fi
+        for orbit_path in "${ORGANIZED_ABS}"/*.EOF; do
+            [[ -f "${orbit_path}" ]] || continue
+            ln -s -- "${orbit_path}" "${preview_work}/$(basename -- "${orbit_path}")"
+        done
 
         printf '[PREVIEW START %d/%d] %s\n' "${preview_index}" "${total}" "${preview_date}"
         set +e
         (
             cd -- "${preview_work}"
-            PATH="${ORBIT_SHIM_DIR}:${PATH}" \
-                "${ORGANIZER_PATH}" "${preview_safe_list}" "${PINS_FILE}" 1 "${POLARIZATION}"
-        ) >> "${preview_log}" 2>&1
+            "${ORGANIZER_PATH}" "${preview_safe_list}" "${PINS_FILE}" 1 "${POLARIZATION}"
+        ) > "${preview_log}" 2>&1
         preview_status=$?
         set -e
 
@@ -413,8 +371,6 @@ pins.ll 必须恰好两行，每行格式：longitude latitude
   Descending：第1行左上点，第2行右下点
   Ascending ：第1行右下点，第2行左上点
 若 pins.ll 不存在或为空，脚本会交互询问两个点；每次同时输入“经度 纬度”。
-本脚本调用原版整理器，并在调用前检查、链接本地 POEORB。整理器内的
-轨道下载命令在本次运行中被屏蔽；缺失轨道时先运行 Run 2.1.2 补齐。
 
 示例：
   ./run2.2_organize_frames.sh 1
@@ -510,7 +466,7 @@ fi
 
 [[ "${JOBS}" =~ ^[1-9][0-9]*$ ]] || die "--jobs must be a positive integer"
 
-for command_name in awk find grep sort wc tee csh mktemp cksum date; do
+for command_name in awk find grep sort wc tee csh mktemp cksum; do
     command -v "${command_name}" >/dev/null 2>&1 ||
         die "cannot find command: ${command_name}"
 done
@@ -600,17 +556,16 @@ if [[ ! -s "${PINS_FILE}" ]]; then
     printf '[OK] Created pins file: %s\n' "${PINS_FILE}"
 fi
 
-if [[ "${ORGANIZER}" == "organize_files_tops_linux_nex_xinw.csh" && \
-      -x "${WORK_DIR}/${ORGANIZER}" ]]; then
-    ORGANIZER_PATH="${WORK_DIR}/${ORGANIZER}"
-elif [[ -x "${ORGANIZER}" ]]; then
+if [[ -x "${ORGANIZER}" ]]; then
     ORGANIZER_PATH="$(cd -- "$(dirname -- "${ORGANIZER}")" && pwd -P)/$(basename -- "${ORGANIZER}")"
 elif ORGANIZER_PATH="$(command -v "${ORGANIZER}" 2>/dev/null)"; then
     :
 else
     die "organizer not found or not executable: ${ORGANIZER}"
 fi
+
 for command_name in \
+    download_sentinel_orbits_linux.csh \
     make_s1a_tops \
     ext_orb_s1a \
     SAT_llt2rat \
@@ -656,17 +611,6 @@ if (( EXECUTE == 1 && EXISTING_FRAME_COUNT > 0 )); then
 fi
 
 LOCK_DIR=""
-ORBIT_SHIM_DIR=""
-RUN22_OWNER_PID="${BASHPID}"
-cleanup_run22() {
-    [[ "${BASHPID}" == "${RUN22_OWNER_PID}" ]] || return 0
-    if [[ -n "${ORBIT_SHIM_DIR}" ]]; then
-        rm -f -- "${ORBIT_SHIM_DIR}/download_sentinel_orbits_linux.csh"
-        rmdir -- "${ORBIT_SHIM_DIR}" 2>/dev/null || true
-    fi
-    [[ -z "${LOCK_DIR}" ]] || rmdir -- "${LOCK_DIR}" 2>/dev/null || true
-}
-trap cleanup_run22 EXIT
 if command -v flock >/dev/null 2>&1; then
     exec 9> .run2.2_organize_frames.lock
     flock -n 9 || die "another Run 2.2 process is already running"
@@ -674,6 +618,7 @@ else
     LOCK_DIR=".run2.2_organize_frames.lock.d"
     mkdir "${LOCK_DIR}" 2>/dev/null ||
         die "another Run 2.2 process may be running (or remove stale ${LOCK_DIR})"
+    trap 'rmdir -- "${LOCK_DIR}" 2>/dev/null || true' EXIT
 fi
 
 PREVIEW_LOG="${ORGANIZED_ABS}/run2.2_mode1_preview.log"
@@ -742,12 +687,6 @@ if (( EXECUTE == 1 )); then
     fi
 fi
 
-ORBIT_SHIM_DIR="$(mktemp -d "${ORGANIZED_ABS}/.run2.2_orbit_shim.XXXXXX")" ||
-    die "cannot create temporary local-orbit command directory"
-printf '#!/bin/sh\nprintf "[ORBIT LOCAL] Network download skipped; use linked EOF.\\n"\nexit 0\n' \
-    > "${ORBIT_SHIM_DIR}/download_sentinel_orbits_linux.csh"
-chmod +x "${ORBIT_SHIM_DIR}/download_sentinel_orbits_linux.csh"
-
 {
     printf '%s\n' '========================================'
     printf 'Run 2.2: organize Sentinel-1 TOPS frames\n'
@@ -762,7 +701,6 @@ chmod +x "${ORBIT_SHIM_DIR}/download_sentinel_orbits_linux.csh"
     fi
     printf 'Parallel jobs : %d\n' "${JOBS}"
     printf 'Orbit files    : %d\n' "${EOF_TOTAL}"
-    printf 'Orbit source   : local POEORB only; network downloader disabled\n'
     printf 'Pins line 1    : %s %s\n' "${LON1}" "${LAT1}"
     printf 'Pins line 2    : %s %s\n' "${LON2}" "${LAT2}"
     printf 'Polarization   : %s\n' "${POLARIZATION}"
@@ -866,22 +804,17 @@ process_mode2_date() {
         return 0
     fi
 
-    if ! link_local_orbits_for_date "${DATE_SAFE_LIST}" "${DATE_WORK}" "${MODE2_DATE}" \
-        > "${DATE_LOG}" 2>&1; then
-        printf '%s\t%s\t%s\n' "${MODE2_DATE}" "local_orbit_check_failed" "${DATE_LOG}" >> "${FAILED_TMP}"
-        printf '[FAILED %d/%d] %s: local orbit check failed (log: %s)\n' \
-            "${MODE2_INDEX}" "${TOTAL_MODE2_DATES}" "${MODE2_DATE}" "${DATE_LOG}" | tee -a "${EXECUTE_LOG}"
-        rm -rf -- "${DATE_WORK}"
-        return 0
-    fi
+    for ORBIT_PATH in "${ORGANIZED_ABS}"/*.EOF; do
+        [[ -f "${ORBIT_PATH}" ]] || continue
+        ln -s -- "${ORBIT_PATH}" "${DATE_WORK}/$(basename -- "${ORBIT_PATH}")"
+    done
 
     printf '[START %d/%d] %s (%s SAFE)\n' "${MODE2_INDEX}" "${TOTAL_MODE2_DATES}" "${MODE2_DATE}" "$(wc -l < "${DATE_SAFE_LIST}" | awk '{print $1}')" | tee -a "${EXECUTE_LOG}"
     set +e
     (
         cd -- "${DATE_WORK}"
-        PATH="${ORBIT_SHIM_DIR}:${PATH}" \
-            "${ORGANIZER_PATH}" "${DATE_SAFE_LIST}" "${PINS_FILE}" 2 "${POLARIZATION}"
-    ) >> "${DATE_LOG}" 2>&1
+        "${ORGANIZER_PATH}" "${DATE_SAFE_LIST}" "${PINS_FILE}" 2 "${POLARIZATION}"
+    ) > "${DATE_LOG}" 2>&1
     DATE_STATUS=$?
     set -e
 

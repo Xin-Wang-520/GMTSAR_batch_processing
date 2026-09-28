@@ -6,3 +6,6 @@ gmt.history
 
 # Local processing inputs and generated products are not source code.
 LuTan-1/GMTSAR-lt1-batch-processing/data/
+
+# Experimental local orbit downloader; keep it out of GitHub updates.
+Sentinel-1/GMTSAR_batch_scripts/run2.1.3_prepare_SAFE_orbits_ASF.sh

@@ -69,7 +69,7 @@ The GMTSAR directory reads the cleaned SAFE products but never writes processing
 | Run 1.3 | Remove VH, keep VV and safely remove verified ZIP files | VV-only SAFE stack |
 | Run 2.1 | Build `SAFE_filelist` and download orbit files | SAFE list and EOF files |
 | Run 2.1.2 | Robustly complete failed orbit downloads with wget/curl fallback | cached monthly indexes, EOF files and a resumable failure list |
-| Run 2.2 | Preview and organize TOPS frames by date | organized frame directories |
+| Run 2.2 | Preview and organize TOPS frames using local POEORB files only | organized frame directories |
 | Run 2.3 | Derive DEM bounds from frame XML files | `topo/dem.grd` and DEM PDF |
 | Run 2.4 | Create F1/F2/F3 and link IW, EOF and DEM inputs | `F1/raw`, `F2/raw`, `F3/raw` |
 | Run 3.1 | Generate `data.in` and select the temporal-middle master | `F*/raw/data.in` |
@@ -142,8 +142,11 @@ Run every script without arguments first when it provides a check or command-gui
 
 Run 2.1.2 is a standalone alternative/recovery downloader for servers where
 the ESA orbit site intermittently times out during Run 2.1. It builds the
-same `organized/SAFE_filelist`, skips every existing non-empty `.EOF`, and
-tries `wget` for 30 seconds followed by `curl` for 30 seconds. Successful
+same `organized/SAFE_filelist` and skips existing valid `.EOF` files. Index
+requests have a 30-second limit per downloader. For orbit ZIPs, `wget` and
+its `curl` fallback can each run for up to 120 seconds while data arrives;
+a 30-second transfer stall ends the attempt. Incomplete `.part` files are
+retained and resumed on the next attempt. Successful
 monthly directory pages such as `tmp_orbit_POEORB_S1A_201701.html` are cached
 for seven days and reused; a stale valid cache is retained as a fallback when
 the network refresh fails.
@@ -171,6 +174,21 @@ The positional run mode is separate from `--mode`: `--mode 1` selects POEORB
 
 Monitor `organized/run2.1.2_wget_curl_orbit_download.log`. The retry list is
 rewritten after every pass, so successful dates are not downloaded again.
+
+### Run 2.2: local orbit use and the original-script backup
+
+Upload only `run2.2_organize_frames.sh` to the track directory. It checks each
+acquisition date for a non-empty local POEORB with the matching Sentinel
+mission and validity dates, then links that EOF into the isolated date work
+directory. During this run it intercepts the orbit downloader call in the
+existing `organize_files_tops_linux_nex_xinw.csh`, so Run 2.2 makes no orbit
+download request. A missing local orbit is reported in the per-date log;
+complete it with Run 2.1.2 and rerun Run 2.2 mode 1 before mode 2. Run 2.2
+requires POEORB even though Run 2.1.2 can also download RESORB for other uses.
+
+`run2.2_organize_frames_old.sh` is an unchanged backup of the earlier Run 2.2
+wrapper. It retains the original organizer behavior and can access the orbit
+website; use `run2.2_organize_frames.sh` for the local-orbit workflow.
 
 Run 3.9 first calls `landmask.csh` with the complete phase-grid region and
 inspects the generated west and south bounds with `gmt grdinfo -C`. If either
@@ -2129,11 +2147,12 @@ grep '\[ERROR\]' organized/run2.1_orbit_download.log
 
 下载策略为：
 
-- 先用 `wget` 尝试30秒；
-- `wget` 失败或 ZIP 完整性检查失败后，再用 `curl` 尝试30秒；
+- 月份轨道索引的 `wget` 和 `curl` 请求各限制30秒；
+- 轨道 ZIP 的 `wget` 和 `curl` 各最多运行120秒；连续30秒没有收到新数据会提前结束；
+- `wget` 失败或 ZIP 完整性检查失败后，改由 `curl` 下载或续传；
 - `tmp_orbit_POEORB_S1A_201701.html` 这类月份轨道索引在 `organized/` 保留7天；
 - 新索引刷新失败时，只要旧缓存有效就继续使用；
-- 未完成的 `.EOF.zip.part` 会被清理，已完成的 `.EOF` 始终保留。
+- 未完成的 `.EOF.zip.part` 会保留供下一轮断点续传；完整性检查失败的 ZIP 会清理，已完成的 `.EOF` 保留。
 
 无参数只预览：
 
@@ -2199,7 +2218,7 @@ wc -l organized/run2.1.2_failed_orbit_dates.tsv
 /data2/xinw/InSAR_processing/Descending/T34
 ```
 
-Run 2.2 从 `T34` 根目录运行，脚本自动进入 `organized/` 调用原始 csh 程序。不需要手动 `cd organized`。
+Run 2.2 从 `T34` 根目录运行，脚本在隔离的日期工作目录中调用原始 csh 程序。不需要手动 `cd organized`，也不需要修改 `/home/xinw/bin/own/` 中的通用整理器。
 
 如果服务器的轨道目录没有 `Ascending/Descending` 父目录，例如 `/data2/xinw/InSAR_processing/T63`，可把方向直接写在 mode 后面：
 
@@ -2217,12 +2236,16 @@ cd /data2/xinw/InSAR_processing/T63
 run2.2_organize_frames.sh
 ```
 
-脚本使用：
+当前只需把 `run2.2_organize_frames.sh` 上传到轨道目录。`run2.2_organize_frames_old.sh` 是修改前的原版备份，不用于当前本地轨道流程；旧版调用整理器时仍可能访问轨道网站。
+
+新版脚本使用：
 
 - `organized/SAFE_filelist`：Run 2.1 生成的 SAFE 绝对路径清单。
-- `organized/*.EOF`：Run 2.1 下载的轨道文件。
+- `organized/*.EOF`：Run 2.1 或 Run 2.1.2 下载的本地 POEORB 精密轨道文件。
 - `organized/pins.ll`：已存在时直接读取；不存在或为空时，脚本交互询问两个经纬度点并自动生成。
 - `organize_files_tops_linux_nex_xinw.csh`：已有的 TOPS 帧重组程序。
+
+mode=1 和 mode=2 都先按卫星、采集日期前后一天的轨道有效期检查本地非空 POEORB，并只把匹配文件链接到该日期工作目录。Run 2.2 在本次运行中临时屏蔽原 csh 内部的轨道下载命令，结束后自动清理临时命令；因此不会向 ESA 发起轨道下载。若某日期缺少 POEORB，该日期会记为失败，日志会提示用 Run 2.1.2 补齐，再重新运行 Run 2.2 mode=1。Run 2.1.2 可单独下载 RESORB，但当前 Run 2.2 要求 POEORB。
 
 `pins.ll` 必须恰好两行，每行格式为 `经度 纬度`：
 
@@ -2280,6 +2303,8 @@ organized/run2.2_mode1_skip_dates.txt
 organized/SAFE_filelist_mode2
 ```
 
+此前某些日期先发生网络超时、后又成功下载轨道，仍因日志中的旧错误被误判为 `critical_error_in_log`。新版 Run 2.2 直接使用本地轨道，可避免这种由轨道网站造成的误判。若之前的 mode=1 因此失败，上传新版后重新执行 mode=1，生成完整的 good/skip 清单，再执行 mode=2。
+
 生成过滤清单时，脚本还会逐个检查所选 SAFE 的 IW1/IW2/IW3 VV XML 和 TIFF；缺失项写入 `run2.2_mode1_input_errors.txt` 并停止。
 
 确认数量和日期正确后执行 mode=2：
@@ -2323,6 +2348,7 @@ mode=2 支持续跑：已有输出会逐日期检查 IW1/IW2/IW3 VV XML/TIFF，�
 ```text
 T34/
 ├── run2.2_organize_frames.sh
+├── run2.2_organize_frames_old.sh  # 可选的原版备份
 ├── run2.2_organize_frames.log
 └── organized/
     ├── pins.ll

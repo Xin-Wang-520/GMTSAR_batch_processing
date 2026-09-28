@@ -13,6 +13,9 @@ export LANGUAGE=C
 
 WGET_LIMIT_SECONDS="${RUN212_WGET_LIMIT_SECONDS:-30}"
 CURL_LIMIT_SECONDS="${RUN212_CURL_LIMIT_SECONDS:-30}"
+ORBIT_WGET_LIMIT_SECONDS="${RUN212_ORBIT_WGET_LIMIT_SECONDS:-120}"
+ORBIT_CURL_LIMIT_SECONDS="${RUN212_ORBIT_CURL_LIMIT_SECONDS:-120}"
+ORBIT_STALL_SECONDS="${RUN212_ORBIT_STALL_SECONDS:-30}"
 INDEX_CACHE_DAYS="${RUN212_INDEX_CACHE_DAYS:-7}"
 MAX_RETRY_PASSES="${RUN212_MAX_RETRY_PASSES:-5}"
 RETRY_DELAY_SECONDS="${RUN212_RETRY_DELAY_SECONDS:-5}"
@@ -33,6 +36,8 @@ usage() {
 InSAR_processing/T*/ 中运行：创建 organized/、生成 SAFE_filelist，并在脚本
 内部先用 wget 下载；wget 失败或 ZIP 损坏时自动改用 curl。
 成功下载的月份轨道索引会在 organized/ 中缓存7天，补跑时优先复用。
+索引页请求限制30秒；轨道 ZIP 一旦开始传输最多允许120秒，连续30秒
+无有效传输才提前停止。未完成的 .part 文件会保留，下一轮断点续传。
 模式2最多自动执行5轮；全部成功时提前结束。
 
 选项：
@@ -96,28 +101,46 @@ fetch_orbit_zip() {
     local url="$1"
     local output="$2"
     local temporary="${output}.part"
+    local -a curl_resume=()
 
-    rm -f -- "${temporary}"
     printf '[ORBIT/WGET] %s\n' "${url}"
-    if timeout "${WGET_LIMIT_SECONDS}s" \
-        wget --timeout=30 --read-timeout=30 --tries=1 \
-        -O "${temporary}" "${url}" && \
-        unzip -tq "${temporary}" >/dev/null 2>&1; then
-        mv -f -- "${temporary}" "${output}"
-        return 0
+    if timeout "${ORBIT_WGET_LIMIT_SECONDS}s" \
+        wget --timeout=30 --read-timeout="${ORBIT_STALL_SECONDS}" --tries=1 \
+        -c -O "${temporary}" "${url}"; then
+        if unzip -tq "${temporary}" >/dev/null 2>&1; then
+            mv -f -- "${temporary}" "${output}"
+            return 0
+        fi
+        printf '[CLEAN] wget completed but ZIP validation failed; restart curl from zero\n'
+        rm -f -- "${temporary}"
     fi
 
-    rm -f -- "${temporary}"
-    printf '[ORBIT/CURL] wget failed or ZIP validation failed; retry with curl\n'
-    if timeout "${CURL_LIMIT_SECONDS}s" \
+    if [[ -s "${temporary}" ]]; then
+        printf '[ORBIT/CURL] Continue partial ZIP with curl (up to %ss total)\n' \
+            "${ORBIT_CURL_LIMIT_SECONDS}"
+        curl_resume=(-C -)
+    else
+        printf '[ORBIT/CURL] wget failed before usable data; retry with curl (up to %ss)\n' \
+            "${ORBIT_CURL_LIMIT_SECONDS}"
+        curl_resume=()
+    fi
+    if timeout "${ORBIT_CURL_LIMIT_SECONDS}s" \
         curl -fL --retry 0 --connect-timeout 30 \
-        --max-time "${CURL_LIMIT_SECONDS}" -o "${temporary}" "${url}" && \
-        unzip -tq "${temporary}" >/dev/null 2>&1; then
-        mv -f -- "${temporary}" "${output}"
-        return 0
+        --speed-limit 1 --speed-time "${ORBIT_STALL_SECONDS}" \
+        --max-time "${ORBIT_CURL_LIMIT_SECONDS}" \
+        "${curl_resume[@]}" -o "${temporary}" "${url}"; then
+        if unzip -tq "${temporary}" >/dev/null 2>&1; then
+            mv -f -- "${temporary}" "${output}"
+            return 0
+        fi
+        printf '[CLEAN] curl completed but ZIP validation failed; remove corrupt partial file\n'
+        rm -f -- "${temporary}"
     fi
 
-    rm -f -- "${temporary}" "${output}"
+    rm -f -- "${output}"
+    if [[ -s "${temporary}" ]]; then
+        printf '[KEEP] Partial ZIP retained for the next retry: %s\n' "${temporary}"
+    fi
     return 1
 }
 
@@ -322,6 +345,12 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 [[ "${ORBIT_MODE}" == "1" || "${ORBIT_MODE}" == "2" ]] || die "--mode must be 1 or 2"
+for timeout_name in WGET_LIMIT_SECONDS CURL_LIMIT_SECONDS \
+    ORBIT_WGET_LIMIT_SECONDS ORBIT_CURL_LIMIT_SECONDS ORBIT_STALL_SECONDS; do
+    timeout_value="${!timeout_name}"
+    [[ "${timeout_value}" =~ ^[1-9][0-9]*$ ]] ||
+        die "${timeout_name} must be a positive integer"
+done
 [[ "${INDEX_CACHE_DAYS}" =~ ^[0-9]+$ ]] ||
     die "RUN212_INDEX_CACHE_DAYS must be a non-negative integer"
 [[ "${MAX_RETRY_PASSES}" =~ ^[1-9][0-9]*$ ]] ||
@@ -451,8 +480,12 @@ printf 'Existing EOF   : %d\n' "${EXISTING_EOF}"
 printf 'Orbit mode     : %s (%s)\n' "${ORBIT_MODE}" \
     "$([[ ${ORBIT_MODE} == 1 ]] && printf POEORB || printf RESORB)"
 printf 'Downloader     : internal wget -> curl fallback\n'
-printf 'Timeout policy : wget %ss + curl %ss, then skip date\n' \
+printf 'Index timeout  : wget %ss + curl %ss\n' \
     "${WGET_LIMIT_SECONDS}" "${CURL_LIMIT_SECONDS}"
+printf 'Orbit timeout  : wget %ss + curl %ss; stop after %ss without data\n' \
+    "${ORBIT_WGET_LIMIT_SECONDS}" "${ORBIT_CURL_LIMIT_SECONDS}" \
+    "${ORBIT_STALL_SECONDS}"
+printf 'Partial ZIP    : keep .part files and resume them in the next attempt\n'
 printf 'Index cache    : reuse for %d day(s); stale fallback on network failure\n' \
     "${INDEX_CACHE_DAYS}"
 if (( RETRY_FAILED_ONLY == 1 )); then
@@ -554,8 +587,12 @@ fi
     printf 'Run selection  : %s\n' "${RUN_DESCRIPTION}"
     printf 'Orbit mode     : %s\n' "${ORBIT_MODE}"
     printf 'Downloader     : internal wget -> curl fallback\n'
-    printf 'Timeout policy : wget %ss + curl %ss, then skip date\n' \
+    printf 'Index timeout  : wget %ss + curl %ss\n' \
         "${WGET_LIMIT_SECONDS}" "${CURL_LIMIT_SECONDS}"
+    printf 'Orbit timeout  : wget %ss + curl %ss; stop after %ss without data\n' \
+        "${ORBIT_WGET_LIMIT_SECONDS}" "${ORBIT_CURL_LIMIT_SECONDS}" \
+        "${ORBIT_STALL_SECONDS}"
+    printf 'Partial ZIP    : keep .part files and resume them in the next attempt\n'
     printf 'Index cache    : reuse for %d day(s); stale fallback on network failure\n' \
         "${INDEX_CACHE_DAYS}"
     if (( RETRY_FAILED_ONLY == 1 )); then
