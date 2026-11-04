@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this workflow in your research, please cite this software and the relevant upstream tools."
+type: software
+title: "GMTSAR Batch Processing"
+authors:
+  - family-names: Wang
+    given-names: Xin
+    affiliation: University of Science and Technology of China
+    email: xinw11@mail.ustc.edu.cn
+repository-code: "https://github.com/Xin-Wang-520/GMTSAR_batch_processing"
+url: "https://github.com/Xin-Wang-520/GMTSAR_batch_processing"
+abstract: "User-developed GMTSAR batch-processing workflows for Sentinel-1 and LuTan-1, including interferogram generation, unwrapping, SBAS time series, and reference corrections."
