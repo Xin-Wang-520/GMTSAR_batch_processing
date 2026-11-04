@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Modified by  : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Run 6.2: resample and mask GNSS east/north grids to the InSAR velocity grid.
 # Modified by Xin Wang, USTC, Hefei, China
 # Contact: xinw11@mail.ustc.edu.cn

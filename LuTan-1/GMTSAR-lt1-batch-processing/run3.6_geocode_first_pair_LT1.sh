@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Author       : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Geocode the earliest interferogram's wrapped filtered phase and export KMZ.
 # Run from Ascending/ or Descending/. No arguments prints help.
 # Preview: ./run3.6_geocode_first_pair_LT1.sh

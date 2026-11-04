@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Author       : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Run 3.1: crop every LT-1 raw SLC first, then align only the cropped stack.
 # Preview is the default. Add positional argument 1 to run formally.
 set -euo pipefail

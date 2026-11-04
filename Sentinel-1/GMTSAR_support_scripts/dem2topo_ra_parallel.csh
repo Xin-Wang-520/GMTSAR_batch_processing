@@ -1,4 +1,13 @@
 #!/bin/csh -f
+# =============================================================================
+# Modified by  : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 #       $Id$
 # Matt WEI Feb 1 2010
 # modified by Xiaopeng Feb 9 2010

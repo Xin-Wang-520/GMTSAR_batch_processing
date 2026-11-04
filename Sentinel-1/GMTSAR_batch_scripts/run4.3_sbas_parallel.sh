@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Modified by  : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Run 4.3: submit the generated sbas_parallel command with nohup.
 # Modified by Xin Wang, USTC, Hefei, China
 # Contact: xinw11@mail.ustc.edu.cn

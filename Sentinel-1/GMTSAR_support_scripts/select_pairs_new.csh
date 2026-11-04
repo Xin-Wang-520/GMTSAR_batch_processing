@@ -1,4 +1,13 @@
 #!/bin/csh -f
+# =============================================================================
+# Modified by  : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 
 # Select interferometric pairs using temporal and perpendicular-baseline limits.
 #

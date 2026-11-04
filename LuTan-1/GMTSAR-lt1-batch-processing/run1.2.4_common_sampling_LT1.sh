@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Author       : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Run 1.2.4: Optionally resample LT-1 SLCs to common sampling parameters.
 #
 # Input:  raw/*.PRM and raw/*.SLC after Run 1.2.3.

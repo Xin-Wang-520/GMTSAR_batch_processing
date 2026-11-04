@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# =============================================================================
+# Author       : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 """Run 4.6: plot Run 4.5 LT-1 SBAS point time series with Matplotlib."""
 
 from __future__ import annotations

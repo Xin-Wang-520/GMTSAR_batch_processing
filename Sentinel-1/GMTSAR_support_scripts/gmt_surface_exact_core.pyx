@@ -1,5 +1,14 @@
 # cython: language_level=3, boundscheck=False, wraparound=False, cdivision=True
 # distutils: extra_compile_args = -O3
+# =============================================================================
+# Modified by  : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Modified by Xin Wang, USTC, Hefei, China
 # Last updated: July 21, 2026
 

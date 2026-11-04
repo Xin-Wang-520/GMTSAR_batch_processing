@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Author       : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Run 3.2: execute GMTSAR batch-processing step 3 (DEM back-geocoding).
 # Preview is the default. Add positional argument 1 to run formally.
 # The master date must be supplied explicitly with --master YYYYMMDD.

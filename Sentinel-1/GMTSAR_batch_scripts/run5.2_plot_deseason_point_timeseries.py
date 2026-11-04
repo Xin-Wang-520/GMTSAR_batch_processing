@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# =============================================================================
+# Modified by  : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # -*- coding: utf-8 -*-
 # Run 5.2: compare original, seasonal, and deseasoned displacement time series.
 # Modified by Xin Wang, USTC, Hefei, China

@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Modified by  : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Modified by Xin Wang, USTC, Hefei, China
 # Last updated: July 24, 2026
 #

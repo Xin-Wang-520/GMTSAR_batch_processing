@@ -1,4 +1,13 @@
 #!/bin/csh -f
+# =============================================================================
+# Author       : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # by xinw 2025.7.21 in USTC
 # tcsh preproc_batch_tops_parallel_new_wx.csh data.in dem.grd 5 1
 

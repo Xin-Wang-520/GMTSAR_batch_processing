@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# =============================================================================
+# Author       : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Run 2.2: convert a geographic ROI to an LT-1 radar-coordinate region_cut.
 # ROI format: longitude latitude, one point per line. Elevation is sampled
 # automatically from topo/dem.grd with GMT grdtrack.

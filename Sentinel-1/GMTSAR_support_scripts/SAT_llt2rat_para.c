@@ -1,3 +1,13 @@
+/* =============================================================================
+ * Modified by  : Xin Wang
+ * Affiliation  : University of Science and Technology of China (USTC)
+ * Location     : Hefei, China
+ * Email        : xinw11@mail.ustc.edu.cn
+ * GitHub       : https://github.com/Xin-Wang-520
+ * Created      : 2026-09-01
+ * Note         : Original author and modification credits follow below.
+ * ============================================================================= */
+
 /*	$Id$	*/
 /****************************************************************************
  *  Program to project a longitude, latitude, and topography
