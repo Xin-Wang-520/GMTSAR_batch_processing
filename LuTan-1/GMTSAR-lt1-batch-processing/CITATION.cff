@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use the LuTan-1 processing workflow in your research, please cite this software and the relevant upstream tools and data providers."
+type: software
+title: "GMTSAR Batch Processing: LuTan-1 Workflow"
+authors:
+  - family-names: Wang
+    given-names: Xin
+    affiliation: University of Science and Technology of China
+    email: xinw11@mail.ustc.edu.cn
+repository-code: "https://github.com/Xin-Wang-520/GMTSAR_batch_processing"
+url: "https://github.com/Xin-Wang-520/GMTSAR_batch_processing/tree/main/LuTan-1/GMTSAR-lt1-batch-processing"
+abstract: "User-developed GMTSAR processing scripts for LuTan-1 stripmap SAR, from SLC preparation and co-registration to interferometry, unwrapping, and SBAS time-series analysis."
