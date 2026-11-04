@@ -111,6 +111,24 @@ Continue with Runs 3.5–3.12 and Runs 4.1–4.7 only after checking the precedi
 
 The repository does not include GMTSAR, GMT, SNAPHU, raw LT-1 products, precise-orbit products, or generated InSAR results.
 
+## Authorship, software citation, and reuse notice
+
+**Maintainer:** Xin Wang (University of Science and Technology of China). Unless otherwise noted, this directory contains research workflow scripts developed and maintained by the author for LuTan-1 (LT-1A/LT-1B) data. This workflow is **not an official GMTSAR or LuTan-1 distribution**; upstream software, third-party code, and SAR data remain subject to their respective rights and license or access conditions.
+
+**If this LT-1 workflow contributes to published research, please cite the software:**
+
+> Wang, X. (2026). *GMTSAR Batch Processing: LuTan-1 Workflow* [Computer software]. GitHub. https://github.com/Xin-Wang-520/GMTSAR_batch_processing/tree/main/LuTan-1/GMTSAR-lt1-batch-processing
+
+For reproducibility, report the repository's release tag or commit hash. Machine-readable metadata are provided in [CITATION.cff](CITATION.cff). If a version-specific software DOI becomes available, cite that archived version instead. Please also cite GMTSAR, GMT, SNAPHU, GNU Parallel, LuTan-1 data providers, and other software or data sources as relevant.
+
+**Related research publication (cite only when scientifically relevant):**
+
+Wang, X., et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070. https://doi.org/10.1016/j.epsl.2026.120070
+
+This paper is a related research output, **not a substitute for citing this LT-1 software workflow**.
+
+**License status:** No repository-wide license has been selected yet. GitHub public visibility alone does not grant unrestricted redistribution or incorporation rights. Contact the maintainer for permissions and check third-party license conditions.
+
 ---
 
 <a id="中文说明"></a>
@@ -225,3 +243,22 @@ Shell 入口缺少必要参数时会显示帮助。大多数脚本不加 `1` 是
 - 与并行数相匹配的内存和磁盘读写能力。
 
 本仓库不包含 GMTSAR、GMT、SNAPHU、LT-1 原始产品、精密轨道产品或运行生成的 InSAR 结果。
+
+## 作者署名、软件引用与使用声明
+
+**作者及维护者：** 王欣（中国科学技术大学）。除另有说明外，本目录中的陆探一号（LT-1A/LT-1B）科研批处理流程由作者开发和维护。本流程**不是 GMTSAR 或陆探一号官方发行版**；依赖的上游软件、第三方代码和 SAR 数据仍须遵守各自的权利、许可证及数据获取条件。
+
+**如果在发表的科研工作中使用本 LT-1 处理流程，欢迎引用软件本身：**
+
+> Wang, X. (2026). *GMTSAR Batch Processing: LuTan-1 Workflow* [Computer software]. GitHub. https://github.com/Xin-Wang-520/GMTSAR_batch_processing/tree/main/LuTan-1/GMTSAR-lt1-batch-processing
+
+为保证结果可复现，请在论文或补充材料中注明所用 Release 版本或 Commit 哈希。目录内已提供 [CITATION.cff](CITATION.cff) 引用元数据；未来如有对应版本的 Zenodo DOI，建议改用正式归档版本进行引用。同时，请按实际使用情况引用 GMTSAR、GMT、SNAPHU、GNU Parallel、LT-1 数据提供方及其他相关软件和数据。
+
+**相关科研论文（仅在研究内容相关时引用）：**
+
+Wang, X., et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070. https://doi.org/10.1016/j.epsl.2026.120070
+
+这篇定日地震论文是相关科研成果，**不能替代对本 LT-1 软件流程的引用**。
+
+**许可证状态：** 目前仓库尚未选择统一的软件许可证。GitHub 公开可见不等于自动授予代码自由再分发或整合使用的全部权利；涉及此类使用，请联系维护者并遵守第三方许可要求。
+
