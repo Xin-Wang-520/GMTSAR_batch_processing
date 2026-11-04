@@ -1,3 +1,12 @@
+# =============================================================================
+# Author       : Xin Wang
+# Affiliation  : University of Science and Technology of China (USTC)
+# Location     : Hefei, China
+# Email        : xinw11@mail.ustc.edu.cn
+# GitHub       : https://github.com/Xin-Wang-520
+# Created      : 2026-09-01
+# =============================================================================
+
 # Build SAT_llt2rat_para in any writable directory on the Linux server.
 #
 # The default GMTSAR root matches the kaiyang server. Override it if needed:
