@@ -5,7 +5,7 @@
 # Location     : Hefei, China
 # Email        : xinw11@mail.ustc.edu.cn
 # GitHub       : https://github.com/Xin-Wang-520
-# Created      : 2026-09-01
+# Uploaded     : 2026-09-02
 # =============================================================================
 
 # Run 3.7: generate a radar-coordinate land mask directly for one burst stack.
