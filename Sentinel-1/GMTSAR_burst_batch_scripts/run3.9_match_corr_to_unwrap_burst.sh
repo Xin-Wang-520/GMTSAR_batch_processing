@@ -5,7 +5,7 @@
 # Location     : Hefei, China
 # Email        : xinw11@mail.ustc.edu.cn
 # GitHub       : https://github.com/Xin-Wang-520
-# Created      : 2026-09-01
+# Uploaded     : 2026-08-31
 # =============================================================================
 
 # Run 3.9: crop finalized burst grids to one common radar-coordinate region.
