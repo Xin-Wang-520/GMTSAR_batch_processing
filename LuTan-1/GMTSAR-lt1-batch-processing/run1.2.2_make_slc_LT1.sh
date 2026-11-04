@@ -5,7 +5,7 @@
 # Location     : Hefei, China
 # Email        : xinw11@mail.ustc.edu.cn
 # GitHub       : https://github.com/Xin-Wang-520
-# Created      : 2026-09-01
+# Uploaded     : 2026-09-16
 # =============================================================================
 
 # Run 1.2.2: Convert LT-1 TIFF products to GMTSAR SLC/PRM/LED files.
