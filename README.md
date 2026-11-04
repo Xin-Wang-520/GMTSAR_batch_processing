@@ -162,13 +162,23 @@ The repository does not bundle GMTSAR, GMT, Sentinel-1 data or orbit products.
 - Do not mix direct, DEM-corrected and reference-pinned products in one SBAS inversion.
 - Keep original Sentinel-1 data separate from GMTSAR processing results.
 
-## Citation and acknowledgement
+## Authorship, software citation, and reuse notice
 
-If this repository or its workflows contribute to your research, please cite:
+**Maintainer:** Xin Wang (University of Science and Technology of China). Unless otherwise noted, this repository contains research workflow scripts developed and maintained by the author. The repository is **not an official GMTSAR distribution**; upstream tools and third-party code remain subject to their respective authors' rights and licenses.
 
-Xin Wang et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070.
+**Please cite the software when using these workflows in published research:**
 
-If these scripts contribute to a publication, cite the relevant GMTSAR, GMT, GNU Parallel, SNAPHU, Sentinel-1 and data-provider references required by the software and datasets used in the analysis.
+> Wang, X. (2026). *GMTSAR Batch Processing* [Computer software]. GitHub. https://github.com/Xin-Wang-520/GMTSAR_batch_processing
+
+Include the release tag or commit hash used for reproducibility. The repository also provides machine-readable citation metadata in [CITATION.cff](CITATION.cff). If a versioned software DOI becomes available, cite that archived version instead.
+
+**Related research publication (cite when relevant):**
+
+Xin Wang et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070. https://doi.org/10.1016/j.epsl.2026.120070
+
+The Dingri paper is a research application and does **not replace a citation to this software**. Also cite the relevant GMTSAR, GMT, GNU Parallel, SNAPHU, Sentinel-1 and data-provider references as appropriate.
+
+**License status:** No repository-wide software license has been selected yet. Public visibility on GitHub does not by itself grant general rights to redistribute or incorporate the code. For such uses, please contact the maintainer and check any applicable third-party licenses.
 
 ---
 
@@ -311,10 +321,20 @@ chmod +x LuTan-1/GMTSAR-lt1-batch-processing/run*.py
 - 不要在同一次 SBAS 中混用直接解缠、DEM 改正和参考区改正结果。
 - Sentinel-1 原始数据与 GMTSAR 处理结果应分目录保存。
 
-## 引用
+## 作者署名、软件引用与使用声明
 
-如果本仓库或其中的处理流程对您的研究有帮助，请引用：
+**维护者：** 王欣（中国科学技术大学）。除另有说明外，本仓库的科研处理流程脚本由作者开发和维护。本仓库**不是 GMTSAR 官方发行版**；所依赖的上游软件与第三方代码仍遵守各自作者的权利及许可条款。
 
-Xin Wang et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070.
+**如果在发表的科研工作中使用本仓库脚本，欢迎引用软件本身：**
 
-如果这些脚本用于论文或科研成果，请根据实际使用的软件与数据，引用 GMTSAR、GMT、GNU Parallel、SNAPHU、Sentinel-1 和数据提供机构要求的相关文献。
+> Wang, X. (2026). *GMTSAR Batch Processing* [Computer software]. GitHub. https://github.com/Xin-Wang-520/GMTSAR_batch_processing
+
+为方便复现，请在论文或补充材料中注明使用的 Release 版本号或 Commit 哈希。仓库已提供 [CITATION.cff](CITATION.cff) 机器可读引用信息；未来若发布带 DOI 的归档版本，建议引用对应版本。
+
+**相关研究论文（研究内容相关时引用）：**
+
+Xin Wang et al. (2026). *Near instantaneously triggered Mw 5.9 aftershock during the 2025 Mw 7.1 Dingri earthquake revealed by radar interferometry*. **Earth and Planetary Science Letters, 686**, 120070. https://doi.org/10.1016/j.epsl.2026.120070
+
+定日地震论文属于科研应用成果，**不能替代对本软件仓库的引用**。同时，请根据研究中实际使用的软件和数据，引用 GMTSAR、GMT、GNU Parallel、SNAPHU、Sentinel-1 及相关数据提供机构的文献。
+
+**许可证状态：** 目前尚未为整个仓库选择统一的软件许可证。GitHub 公开可见不等于自动授予代码再分发或整合使用的全部权利。如需此类使用，请联系维护者，并遵守适用的第三方许可证。
